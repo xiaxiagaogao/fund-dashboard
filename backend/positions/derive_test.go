@@ -127,3 +127,73 @@ func TestDerive_TwoRoundTrips(t *testing.T) {
 	nearly(t, closed[0].RealizedPnL, -5, "second pnl (most recent)")
 	nearly(t, closed[1].RealizedPnL, 10, "first pnl")
 }
+
+// Direction flip in one-way mode (positionSide=BOTH): long 5, then a single
+// SELL 8 that closes the 5-lot long AND opens a 3-lot short, then BUY 3 to
+// close the short. Must yield TWO round trips with prorated quote/commission —
+// not one mangled LONG cycle (the pre-fix behavior).
+func TestDerive_DirectionFlipSplitsCycles(t *testing.T) {
+	trades := []binance.UserTrade{
+		{ID: 1, Symbol: "BTCUSDT", Side: "BUY", PositionSide: "BOTH", Price: 100, Qty: 5, QuoteQty: 500, Commission: 0.5, Time: 1000},
+		// SELL 8 @110: 5 closes the long (realized +50), 3 opens a short.
+		{ID: 2, Symbol: "BTCUSDT", Side: "SELL", PositionSide: "BOTH", Price: 110, Qty: 8, QuoteQty: 880, RealizedPnL: 50, Commission: 0.8, Time: 2000},
+		// BUY 3 @105 closes the short (realized +15).
+		{ID: 3, Symbol: "BTCUSDT", Side: "BUY", PositionSide: "BOTH", Price: 105, Qty: 3, QuoteQty: 315, RealizedPnL: 15, Commission: 0.3, Time: 3000},
+	}
+	closed, open := Derive(trades)
+	if len(open) != 0 {
+		t.Fatalf("open: got %d want 0 (%+v)", len(open), open)
+	}
+	if len(closed) != 2 {
+		t.Fatalf("closed: got %d want 2 (%+v)", len(closed), closed)
+	}
+	// closed is sorted by exit time desc → [0] = short, [1] = long.
+	short, long := closed[0], closed[1]
+
+	if long.DirectionalSide != "LONG" {
+		t.Errorf("first cycle side: got %s want LONG", long.DirectionalSide)
+	}
+	nearly(t, long.EntryQuantity, 5, "long entry qty")
+	nearly(t, long.ExitQuantity, 5, "long exit qty")
+	nearly(t, long.EntryPrice, 100, "long entry px")
+	nearly(t, long.ExitPrice, 110, "long exit px")
+	nearly(t, long.RealizedPnL, 50, "long pnl")
+	// Commission: 0.5 (open) + 5/8 of 0.8 (close leg) = 1.0
+	nearly(t, long.Commission, 1.0, "long commission")
+	if long.EntryTime != 1000 || long.ExitTime != 2000 {
+		t.Errorf("long times: entry %d exit %d", long.EntryTime, long.ExitTime)
+	}
+
+	if short.DirectionalSide != "SHORT" {
+		t.Errorf("second cycle side: got %s want SHORT", short.DirectionalSide)
+	}
+	nearly(t, short.EntryQuantity, 3, "short entry qty")
+	nearly(t, short.ExitQuantity, 3, "short exit qty")
+	nearly(t, short.EntryPrice, 110, "short entry px")
+	nearly(t, short.ExitPrice, 105, "short exit px")
+	nearly(t, short.RealizedPnL, 15, "short pnl")
+	// Commission: 3/8 of 0.8 (open leg) + 0.3 (close) = 0.6
+	nearly(t, short.Commission, 0.6, "short commission")
+	if short.EntryTime != 2000 || short.ExitTime != 3000 {
+		t.Errorf("short times: entry %d exit %d", short.EntryTime, short.ExitTime)
+	}
+}
+
+// A flip whose residual stays open: long 2, SELL 5 → short 3 still on book.
+func TestDerive_FlipResidualStaysOpen(t *testing.T) {
+	trades := []binance.UserTrade{
+		{ID: 1, Symbol: "ETHUSDT", Side: "BUY", PositionSide: "BOTH", Price: 100, Qty: 2, QuoteQty: 200, Time: 1000},
+		{ID: 2, Symbol: "ETHUSDT", Side: "SELL", PositionSide: "BOTH", Price: 120, Qty: 5, QuoteQty: 600, RealizedPnL: 40, Time: 2000},
+	}
+	closed, open := Derive(trades)
+	if len(closed) != 1 || len(open) != 1 {
+		t.Fatalf("got closed=%d open=%d, want 1/1", len(closed), len(open))
+	}
+	nearly(t, closed[0].RealizedPnL, 40, "closed pnl")
+	nearly(t, closed[0].ExitQuantity, 2, "closed exit qty")
+	if open[0].DirectionalSide != "SHORT" {
+		t.Errorf("residual side: got %s want SHORT", open[0].DirectionalSide)
+	}
+	nearly(t, open[0].EntryQuantity, 3, "residual qty")
+	nearly(t, open[0].EntryPrice, 120, "residual entry px")
+}

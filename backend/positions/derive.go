@@ -11,7 +11,12 @@
 //   4. When running_qty crosses zero (full close), emit one closed position
 //      with weighted-avg entry/exit prices, sum of realizedPnL, and the time
 //      range from first opening fill to the closing fill.
-//   5. If, at the end of the walk, running_qty != 0, the residual is an OPEN
+//   5. A closing fill that overshoots zero (a direction flip in one-way mode,
+//      e.g. long 5 then SELL 8) is split: |running_qty| closes the current
+//      cycle, the remainder opens the next cycle in the opposite direction.
+//      Quote value and commission are prorated by quantity; realizedPnL goes
+//      to the closing side (Binance realizes PnL only on closes).
+//   6. If, at the end of the walk, running_qty != 0, the residual is an OPEN
 //      position fragment (we typically don't need this — positionRisk is the
 //      authoritative source for OPEN — but we expose it for diagnostics).
 //
@@ -70,88 +75,104 @@ func Derive(trades []binance.UserTrade) (closed, open []Lifecycle) {
 		sort.Slice(fills, func(i, j int) bool { return fills[i].Time < fills[j].Time })
 
 		var (
-			running float64 // signed net qty
-			cur     Lifecycle
-		)
-		flush := func() {
-			if cur.EntryQuantity > 0 {
-				if !cur.Open {
-					closed = append(closed, cur)
-				} else {
-					open = append(open, cur)
-				}
-			}
-			cur = Lifecycle{}
-		}
-
-		var (
+			running       float64 // signed net qty
+			cur           Lifecycle
 			entryQuoteSum float64 // for weighted-avg entry price
 			exitQuoteSum  float64 // for weighted-avg exit price
 		)
 
+		// begin starts a fresh lifecycle keyed off fill f.
+		begin := func(f binance.UserTrade, isLongLeg bool) {
+			cur = Lifecycle{Symbol: f.Symbol, PositionSide: f.PositionSide, EntryTime: f.Time, Open: true}
+			if f.PositionSide == "LONG" || f.PositionSide == "SHORT" {
+				cur.DirectionalSide = f.PositionSide
+			} else if isLongLeg {
+				cur.DirectionalSide = "LONG"
+			} else {
+				cur.DirectionalSide = "SHORT"
+			}
+			entryQuoteSum, exitQuoteSum = 0, 0
+		}
+		// emit finalizes weighted prices and appends cur to closed/open.
+		emit := func() {
+			if cur.EntryQuantity <= 0 {
+				cur = Lifecycle{}
+				return
+			}
+			cur.EntryPrice = entryQuoteSum / cur.EntryQuantity
+			if cur.ExitQuantity > 0 {
+				cur.ExitPrice = exitQuoteSum / cur.ExitQuantity
+			}
+			if cur.Open {
+				open = append(open, cur)
+			} else {
+				closed = append(closed, cur)
+			}
+			cur = Lifecycle{}
+		}
+
 		for _, f := range fills {
 			isLongLeg := f.Side == "BUY" // BUY grows LONG / shrinks SHORT
-			signedFillQty := f.Qty
+			signed := f.Qty
 			if !isLongLeg {
-				signedFillQty = -f.Qty
+				signed = -f.Qty
 			}
 
-			// If we're at zero (or about to switch direction), this fill starts a new lifecycle.
-			if running == 0 || sign(running) == sign(signedFillQty) {
-				// Opening / scale-in
+			switch {
+			case running == 0 || sign(running) == sign(signed):
+				// Opening / scale-in.
 				if cur.EntryQuantity == 0 {
-					cur.Symbol = f.Symbol
-					cur.PositionSide = f.PositionSide
-					if f.PositionSide == "LONG" || f.PositionSide == "SHORT" {
-						cur.DirectionalSide = f.PositionSide
-					} else if isLongLeg {
-						cur.DirectionalSide = "LONG"
-					} else {
-						cur.DirectionalSide = "SHORT"
-					}
-					cur.EntryTime = f.Time
-					cur.Open = true
+					begin(f, isLongLeg)
 				}
 				cur.EntryQuantity += f.Qty
 				entryQuoteSum += f.QuoteQty
+				cur.Commission += f.Commission
 				cur.NumOpeningFills++
-			} else {
-				// Closing (opposing the running direction)
+				running += signed
+
+			case math.Abs(signed) <= math.Abs(running)+1e-9:
+				// Closing (partial or full) — does not overshoot zero.
 				cur.ExitQuantity += f.Qty
 				exitQuoteSum += f.QuoteQty
 				cur.ExitTime = f.Time
 				cur.RealizedPnL += f.RealizedPnL
+				cur.Commission += f.Commission
 				cur.NumClosingFills++
-			}
-			cur.Commission += f.Commission
+				running += signed
+				if math.Abs(running) < 1e-9 {
+					running = 0
+					cur.Open = false
+					emit()
+				}
 
-			// Update running net qty (signed by leg direction).
-			running += signedFillQty
-
-			// Round-trip complete when running returns to (≈) zero.
-			if math.Abs(running) < 1e-9 && cur.EntryQuantity > 0 {
+			default:
+				// Direction flip (one-way mode): a single fill that closes the
+				// whole position AND opens a new one the other way. Split it —
+				// the closing portion extinguishes the current cycle (its
+				// realizedPnL belongs entirely to the close), the remainder
+				// seeds the next cycle in the opposite direction. Quote value
+				// and commission are prorated by quantity.
+				closeQty := math.Abs(running)
+				frac := closeQty / f.Qty
+				cur.ExitQuantity += closeQty
+				exitQuoteSum += f.QuoteQty * frac
+				cur.ExitTime = f.Time
+				cur.RealizedPnL += f.RealizedPnL
+				cur.Commission += f.Commission * frac
+				cur.NumClosingFills++
 				cur.Open = false
-				if cur.EntryQuantity > 0 {
-					cur.EntryPrice = entryQuoteSum / cur.EntryQuantity
-				}
-				if cur.ExitQuantity > 0 {
-					cur.ExitPrice = exitQuoteSum / cur.ExitQuantity
-				}
-				flush()
-				running = 0
-				entryQuoteSum, exitQuoteSum = 0, 0
+				running += signed // overshoot remainder, signed toward the new direction
+				emit()
+
+				begin(f, isLongLeg)
+				cur.EntryQuantity = f.Qty - closeQty
+				entryQuoteSum = f.QuoteQty * (1 - frac)
+				cur.Commission = f.Commission * (1 - frac)
+				cur.NumOpeningFills = 1
 			}
 		}
 		// Residual open at end of walk.
-		if cur.EntryQuantity > 0 {
-			if cur.EntryQuantity > 0 {
-				cur.EntryPrice = entryQuoteSum / cur.EntryQuantity
-			}
-			if cur.ExitQuantity > 0 {
-				cur.ExitPrice = exitQuoteSum / cur.ExitQuantity
-			}
-			flush()
-		}
+		emit()
 	}
 
 	// Sort closed by ExitTime desc (most recent first).
