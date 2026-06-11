@@ -33,6 +33,17 @@ type Claims struct {
 	Username string `json:"u"`
 	IsAdmin  bool   `json:"adm"`
 	Exp      int64  `json:"exp"`
+	// Pwv is a fingerprint of the password hash current at issue time. The
+	// session-validation layer (api.Server.validateSession) compares it against
+	// the live hash so a password change immediately invalidates old tokens.
+	Pwv string `json:"pwv,omitempty"`
+}
+
+// PasswordVersion derives a short fingerprint of a bcrypt password hash for
+// embedding in Claims.Pwv. Not secret material — just a change detector.
+func PasswordVersion(passwordHash string) string {
+	sum := sha256.Sum256([]byte(passwordHash))
+	return base64.RawURLEncoding.EncodeToString(sum[:])[:12]
 }
 
 // ctxKey is a private type so other packages can't accidentally collide.
@@ -55,9 +66,10 @@ func WithClaims(ctx context.Context, c *Claims) context.Context {
 }
 
 // IssueToken signs a fresh token for a friend and returns the cookie-ready string.
-func IssueToken(secret string, friendID int64, username string, isAdmin bool) (string, time.Time, error) {
+// pwv is the PasswordVersion of the friend's current password hash.
+func IssueToken(secret string, friendID int64, username string, isAdmin bool, pwv string) (string, time.Time, error) {
 	exp := time.Now().Add(cookieTTL)
-	c := Claims{FriendID: friendID, Username: username, IsAdmin: isAdmin, Exp: exp.Unix()}
+	c := Claims{FriendID: friendID, Username: username, IsAdmin: isAdmin, Exp: exp.Unix(), Pwv: pwv}
 	payload, err := json.Marshal(c)
 	if err != nil {
 		return "", time.Time{}, err

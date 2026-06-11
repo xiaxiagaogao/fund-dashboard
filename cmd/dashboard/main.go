@@ -92,12 +92,16 @@ func main() {
 		log.Println("WARNING: Binance keys not set — /api/admin/snapshot, /api/admin/cash-events, AND /api/positions/* will return 503")
 	}
 
-	_ = ctx // referenced inside scheduler goroutines via job.Start
-
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// WriteTimeout covers handler time too — positions refresh and
+		// cash-event recording each wait on Binance (15s client timeout per
+		// call), so leave generous headroom. nginx in front reads for 60s.
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -112,7 +116,9 @@ func main() {
 	log.Println("shutdown")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
-	httpSrv.Shutdown(shutdownCtx)
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("shutdown: %v", err)
+	}
 }
 
 func envOr(key, fallback string) string {

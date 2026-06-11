@@ -340,7 +340,10 @@ func runCashEvent(ctx context.Context, cfg *config.Config, args []string, evtTyp
 	}
 
 	if evtType == store.EventWithdraw {
-		myShares, _ := store.FriendShares(ctx, db, friend.ID)
+		myShares, err := store.FriendShares(ctx, db, friend.ID)
+		if err != nil {
+			die("friend shares: %v", err)
+		}
 		if -sharesDelta > myShares+1e-9 {
 			die("friend %s only holds %.6f shares; cannot burn %.6f", username, myShares, -sharesDelta)
 		}
@@ -356,15 +359,26 @@ func runCashEvent(ctx context.Context, cfg *config.Config, args []string, evtTyp
 	}
 
 	postShares := totalShares + sharesDelta
-	postEquity := liveEquity
-	if postEquity == 0 {
-		postEquity = postShares * navUsed
+	// Backdated events get no at-event snapshot — the equity we hold is
+	// today's; writing it at a past taken_at would fake an equity-curve point.
+	skew := time.Now().UnixMilli() - *occurredAt
+	if skew < 0 {
+		skew = -skew
 	}
-	if _, err := store.InsertNAVSnapshot(ctx, db, store.NAVSnapshot{
-		TakenAt: *occurredAt, TotalEquityUSDT: postEquity,
-		TotalShares: postShares, NAV: navUsed, Source: store.SnapshotCashEvent,
-	}); err != nil && err != store.ErrDuplicateSnapshot {
-		die("snapshot: %v", err)
+	if skew <= store.MaxEventSnapshotSkew.Milliseconds() {
+		postEquity := liveEquity
+		if postEquity == 0 {
+			postEquity = postShares * navUsed
+		}
+		if _, err := store.InsertNAVSnapshot(ctx, db, store.NAVSnapshot{
+			TakenAt: *occurredAt, TotalEquityUSDT: postEquity,
+			TotalShares: postShares, NAV: navUsed, Source: store.SnapshotCashEvent,
+		}); err != nil && err != store.ErrDuplicateSnapshot {
+			die("snapshot: %v", err)
+		}
+	} else {
+		fmt.Printf("  (occurred-at is %s away from now — skipping at-event NAV snapshot to keep the equity curve honest)\n",
+			time.Duration(skew)*time.Millisecond)
 	}
 
 	store.WriteAudit(ctx, db, username, "cash_event.create", map[string]any{

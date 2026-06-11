@@ -2,6 +2,7 @@ package binance
 
 import (
 	"context"
+	"log"
 	"net/url"
 	"strconv"
 	"time"
@@ -100,17 +101,12 @@ func (c *Client) WalkUserTradesSince(ctx context.Context, symbol string, sinceMs
 					pastWindow = true
 					break
 				}
-				price, _ := strconv.ParseFloat(r.Price, 64)
-				qty, _ := strconv.ParseFloat(r.Qty, 64)
-				quote, _ := strconv.ParseFloat(r.QuoteQty, 64)
-				realized, _ := strconv.ParseFloat(r.RealizedPnl, 64)
-				commission, _ := strconv.ParseFloat(r.Commission, 64)
-				all = append(all, UserTrade{
-					ID: r.ID, OrderID: r.OrderID, Symbol: r.Symbol, Side: r.Side,
-					PositionSide: r.PositionSide, Price: price, Qty: qty, QuoteQty: quote,
-					RealizedPnL: realized, Commission: commission, Time: r.Time,
-					Maker: r.Maker, Buyer: r.Buyer,
-				})
+				t, err := parseUserTrade(r)
+				if err != nil {
+					log.Printf("binance: skipping bad userTrades row: %v", err)
+					continue
+				}
+				all = append(all, t)
 			}
 			if pastWindow || len(rows) < pageSize {
 				break

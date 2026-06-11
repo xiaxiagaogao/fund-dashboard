@@ -3,13 +3,32 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/xiagao/fund-dashboard/backend/middleware"
 	"github.com/xiagao/fund-dashboard/backend/store"
 )
+
+// clientIP extracts the real client IP. Deployment chain is
+// Cloudflare → host nginx → container, so prefer CF-Connecting-IP, then
+// nginx's X-Real-IP, then the raw socket peer.
+func clientIP(r *http.Request) string {
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 
 type loginReq struct {
 	Username string `json:"username"`
@@ -26,10 +45,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "username and password required")
 		return
 	}
+	// Brute-force guard: bcrypt makes each attempt slow, but friend-chosen
+	// passwords deserve a hard cap too. Keyed per username+IP so one friend
+	// fat-fingering their password can't lock everyone out.
+	limitKey := strings.ToLower(in.Username) + "|" + clientIP(r)
+	if !s.limiter().allow(limitKey) {
+		writeErr(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
+		return
+	}
 	f, err := store.GetFriendByUsername(r.Context(), s.DB, in.Username)
 	if errors.Is(err, store.ErrFriendNotFound) {
 		// Constant-time-ish: still hash the password to avoid leaking timing.
 		bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidsaltinvalidsaltinvalidsaltinvalidsa"), []byte(in.Password))
+		s.limiter().fail(limitKey)
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -38,11 +66,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(f.PasswordHash), []byte(in.Password)); err != nil {
+		s.limiter().fail(limitKey)
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	s.limiter().reset(limitKey)
 
-	tok, exp, err := middleware.IssueToken(s.JWTSecret, f.ID, f.Username, f.IsAdmin)
+	tok, exp, err := middleware.IssueToken(s.JWTSecret, f.ID, f.Username, f.IsAdmin, middleware.PasswordVersion(f.PasswordHash))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "issue token failed")
 		return

@@ -46,6 +46,12 @@ func (j *SnapshotJob) RunOnce(ctx context.Context) error {
 	if j.Binance == nil {
 		return fmt.Errorf("snapshot: binance client not configured")
 	}
+	// Piggyback WAL maintenance on the snapshot cadence — see store.CheckpointWAL.
+	defer func() {
+		if err := store.CheckpointWAL(ctx, j.DB); err != nil {
+			log.Printf("snapshot: wal checkpoint: %v", err)
+		}
+	}()
 	equity, _, err := j.Binance.AccountEquity(ctx)
 	if err != nil {
 		return fmt.Errorf("snapshot: binance equity: %w", err)

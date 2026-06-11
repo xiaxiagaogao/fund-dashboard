@@ -12,7 +12,7 @@ import (
 const testSecret = "test-secret-32-bytes-padding-xxxxxxxxxxxxxxxxxx"
 
 func TestIssueAndVerify_Roundtrip(t *testing.T) {
-	tok, exp, err := IssueToken(testSecret, 42, "alice", false)
+	tok, exp, err := IssueToken(testSecret, 42, "alice", false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestIssueAndVerify_Roundtrip(t *testing.T) {
 }
 
 func TestVerifyToken_BadSignature(t *testing.T) {
-	tok, _, _ := IssueToken(testSecret, 1, "x", false)
+	tok, _, _ := IssueToken(testSecret, 1, "x", false, "")
 	tampered := tok[:len(tok)-3] + "xxx"
 	_, err := VerifyToken(testSecret, tampered)
 	if !errors.Is(err, ErrBadSig) {
@@ -38,7 +38,7 @@ func TestVerifyToken_BadSignature(t *testing.T) {
 }
 
 func TestVerifyToken_WrongSecret(t *testing.T) {
-	tok, _, _ := IssueToken(testSecret, 1, "x", false)
+	tok, _, _ := IssueToken(testSecret, 1, "x", false, "")
 	_, err := VerifyToken("different-secret", tok)
 	if !errors.Is(err, ErrBadSig) {
 		t.Errorf("want ErrBadSig, got %v", err)
@@ -64,7 +64,7 @@ func TestRequireAuth_NoCookie(t *testing.T) {
 }
 
 func TestRequireAuth_GoodCookie_ContextHasClaims(t *testing.T) {
-	tok, _, _ := IssueToken(testSecret, 7, "bob", false)
+	tok, _, _ := IssueToken(testSecret, 7, "bob", false, "")
 	called := false
 	h := RequireAuth(testSecret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -86,7 +86,7 @@ func TestRequireAuth_GoodCookie_ContextHasClaims(t *testing.T) {
 }
 
 func TestRequireAdmin_NonAdminGets403(t *testing.T) {
-	tok, _, _ := IssueToken(testSecret, 7, "bob", false) // not admin
+	tok, _, _ := IssueToken(testSecret, 7, "bob", false, "") // not admin
 	h := RequireAdmin(testSecret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("admin handler should not be invoked for non-admin")
 	}))
@@ -103,7 +103,7 @@ func TestRequireAdmin_NonAdminGets403(t *testing.T) {
 }
 
 func TestRequireAdmin_AdminAllowed(t *testing.T) {
-	tok, _, _ := IssueToken(testSecret, 1, "owner", true)
+	tok, _, _ := IssueToken(testSecret, 1, "owner", true, "")
 	called := false
 	h := RequireAdmin(testSecret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true

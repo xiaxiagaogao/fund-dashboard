@@ -3,6 +3,7 @@ package positions
 import (
 	"context"
 	"database/sql"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -45,8 +46,10 @@ type Orchestrator struct {
 	Lookback time.Duration // how far back to look for closed positions; default 90d
 	CacheTTL time.Duration // default 60s
 
-	mu     sync.Mutex
+	mu     sync.Mutex // guards cached
 	cached *cacheEntry
+
+	fetchMu sync.Mutex // single-flight: at most one Binance refresh in flight
 }
 
 type cacheEntry struct {
@@ -55,25 +58,49 @@ type cacheEntry struct {
 	closed []View
 }
 
+// maxStaleServe caps how old a cache entry may be and still be served as a
+// fallback when a refresh fails — a transient Binance hiccup shouldn't blank
+// the positions panels for everyone.
+const maxStaleServe = 15 * time.Minute
+
 // Refresh returns (open, closed) views with a short cache so multiple friends
 // loading the page don't trigger a Binance positionRisk fetch each time.
 func (o *Orchestrator) Refresh(ctx context.Context) (open []View, closed []View, err error) {
-	o.mu.Lock()
-	if o.cached != nil && time.Since(o.cached.at) < o.cacheTTL() {
-		c := o.cached
-		o.mu.Unlock()
+	if c := o.freshCache(o.cacheTTL()); c != nil {
 		return c.open, c.closed, nil
 	}
-	o.mu.Unlock()
+
+	// Single-flight: one goroutine talks to Binance, late arrivals queue here
+	// and then find the freshly written cache instead of fetching again.
+	o.fetchMu.Lock()
+	defer o.fetchMu.Unlock()
+	if c := o.freshCache(o.cacheTTL()); c != nil {
+		return c.open, c.closed, nil
+	}
 
 	open, closed, err = o.refreshNow(ctx)
 	if err != nil {
+		if c := o.freshCache(maxStaleServe); c != nil {
+			log.Printf("positions: refresh failed, serving %s-old cache: %v",
+				time.Since(c.at).Round(time.Second), err)
+			return c.open, c.closed, nil
+		}
 		return nil, nil, err
 	}
 	o.mu.Lock()
 	o.cached = &cacheEntry{at: time.Now(), open: open, closed: closed}
 	o.mu.Unlock()
 	return open, closed, nil
+}
+
+// freshCache returns the cache entry if it is younger than maxAge, else nil.
+func (o *Orchestrator) freshCache(maxAge time.Duration) *cacheEntry {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.cached != nil && time.Since(o.cached.at) < maxAge {
+		return o.cached
+	}
+	return nil
 }
 
 func (o *Orchestrator) cacheTTL() time.Duration {

@@ -165,12 +165,22 @@ func (s *Server) handleAdminCashEvent(w http.ResponseWriter, r *http.Request) {
 		in.OccurredAtMs = time.Now().UnixMilli()
 	}
 
+	// Serialize share-ledger mutations — see Server.cashEventMu.
+	s.cashEventMu.Lock()
+	defer s.cashEventMu.Unlock()
+
 	friend, err := store.GetFriendByUsername(r.Context(), s.DB, in.Username)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "friend not found")
 		return
 	}
-	totalShares, _ := store.TotalShares(r.Context(), s.DB)
+	// A DB error here MUST abort: totalShares=0 would silently route a deposit
+	// into the bootstrap path and mint at NAV=1.0.
+	totalShares, err := store.TotalShares(r.Context(), s.DB)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "total shares query failed: "+err.Error())
+		return
+	}
 
 	var (
 		sharesDelta float64
@@ -229,7 +239,11 @@ func (s *Server) handleAdminCashEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Withdrawal: never let a friend burn more than they hold.
 	if in.Type == store.EventWithdraw {
-		myShares, _ := store.FriendShares(r.Context(), s.DB, friend.ID)
+		myShares, err := store.FriendShares(r.Context(), s.DB, friend.ID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "friend shares query failed: "+err.Error())
+			return
+		}
 		if -sharesDelta > myShares+1e-9 {
 			writeErr(w, http.StatusBadRequest, "friend does not hold enough shares to withdraw that much")
 			return
@@ -248,15 +262,23 @@ func (s *Server) handleAdminCashEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Precise snapshot at the event time. If we have liveEquity, use it directly
 	// (it already reflects the post-event state); otherwise extrapolate.
-	postEquity := liveEquity
-	if postEquity == 0 {
-		// Manual-NAV path: synthesize from NAV * shares
-		postEquity = (totalShares + sharesDelta) * navUsed
+	// Backdated events get NO snapshot: the equity we hold is *today's*, and
+	// writing it at a past taken_at would fake a point on the equity curve.
+	skew := time.Now().UnixMilli() - in.OccurredAtMs
+	if skew < 0 {
+		skew = -skew
 	}
-	_, _ = store.InsertNAVSnapshot(r.Context(), s.DB, store.NAVSnapshot{
-		TakenAt: in.OccurredAtMs, TotalEquityUSDT: postEquity,
-		TotalShares: totalShares + sharesDelta, NAV: navUsed, Source: store.SnapshotCashEvent,
-	})
+	if skew <= store.MaxEventSnapshotSkew.Milliseconds() {
+		postEquity := liveEquity
+		if postEquity == 0 {
+			// Manual-NAV path: synthesize from NAV * shares
+			postEquity = (totalShares + sharesDelta) * navUsed
+		}
+		_, _ = store.InsertNAVSnapshot(r.Context(), s.DB, store.NAVSnapshot{
+			TakenAt: in.OccurredAtMs, TotalEquityUSDT: postEquity,
+			TotalShares: totalShares + sharesDelta, NAV: navUsed, Source: store.SnapshotCashEvent,
+		})
+	}
 
 	caller := middleware.FromContext(r.Context())
 	store.WriteAudit(r.Context(), s.DB, caller.Username, "cash_event.create", map[string]any{
@@ -327,7 +349,11 @@ func (s *Server) handleAdminSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, "binance: "+err.Error())
 		return
 	}
-	totalShares, _ := store.TotalShares(r.Context(), s.DB)
+	totalShares, err := store.TotalShares(r.Context(), s.DB)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "total shares query failed: "+err.Error())
+		return
+	}
 	currentNAV := nav.CurrentNAV(equity, totalShares)
 	now := time.Now().UnixMilli()
 	id, err := store.InsertNAVSnapshot(r.Context(), s.DB, store.NAVSnapshot{

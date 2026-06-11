@@ -28,10 +28,12 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"sync"
 
 	"github.com/xiagao/fund-dashboard/backend/binance"
 	"github.com/xiagao/fund-dashboard/backend/middleware"
 	"github.com/xiagao/fund-dashboard/backend/positions"
+	"github.com/xiagao/fund-dashboard/backend/store"
 )
 
 type Server struct {
@@ -41,6 +43,46 @@ type Server struct {
 	JWTSecret    string
 	CookieSecure bool   // true in prod (behind HTTPS), false for local dev
 	StaticDir    string // optional: directory holding the built SvelteKit SPA. When set, anything not /api/* or /healthz falls through to it.
+
+	// cashEventMu serializes the read-shares → compute → insert sequence in
+	// handleAdminCashEvent. SQLite's busy_timeout protects the writes, but the
+	// share math reads pool state first — two concurrent admin submissions
+	// could both mint against the same pre-state. One admin in practice, but
+	// the lock makes it correct by construction.
+	cashEventMu sync.Mutex
+
+	limiterOnce sync.Once
+	loginLimit  *loginLimiter
+}
+
+func (s *Server) limiter() *loginLimiter {
+	s.limiterOnce.Do(func() { s.loginLimit = newLoginLimiter() })
+	return s.loginLimit
+}
+
+// auth / admin wrap the pure-JWT middleware with a DB-backed session check:
+// the friend must still exist and the token's password fingerprint must match
+// the current hash. This is what makes set-password / friend deletion take
+// effect immediately instead of "whenever the 7-day cookie expires".
+func (s *Server) auth(h http.HandlerFunc) http.Handler {
+	return middleware.RequireAuth(s.JWTSecret, s.validateSession(h))
+}
+
+func (s *Server) admin(h http.HandlerFunc) http.Handler {
+	return middleware.RequireAdmin(s.JWTSecret, s.validateSession(h))
+}
+
+func (s *Server) validateSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := middleware.FromContext(r.Context())
+		f, err := store.GetFriendByID(r.Context(), s.DB, c.FriendID)
+		if err != nil || middleware.PasswordVersion(f.PasswordHash) != c.Pwv {
+			middleware.ClearSessionCookie(w, s.CookieSecure)
+			http.Error(w, "session expired", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Routes returns a configured http.Handler with all routes registered.
@@ -52,24 +94,24 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 
 	// Authenticated (any user)
-	mux.Handle("POST /api/logout", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleLogout)))
-	mux.Handle("GET /api/me", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleMe)))
-	mux.Handle("GET /api/me/summary", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleMySummary)))
-	mux.Handle("GET /api/me/events", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleMyEvents)))
-	mux.Handle("GET /api/me/export.csv", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleMyExportCSV)))
-	mux.Handle("GET /api/equity-curve", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleEquityCurve)))
-	mux.Handle("GET /api/aggregate", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleAggregate)))
-	mux.Handle("GET /api/positions/open", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleOpenPositions)))
-	mux.Handle("GET /api/positions/closed", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleClosedPositions)))
-	mux.Handle("GET /api/positions/stats", middleware.RequireAuth(s.JWTSecret, http.HandlerFunc(s.handleStats)))
+	mux.Handle("POST /api/logout", s.auth(s.handleLogout))
+	mux.Handle("GET /api/me", s.auth(s.handleMe))
+	mux.Handle("GET /api/me/summary", s.auth(s.handleMySummary))
+	mux.Handle("GET /api/me/events", s.auth(s.handleMyEvents))
+	mux.Handle("GET /api/me/export.csv", s.auth(s.handleMyExportCSV))
+	mux.Handle("GET /api/equity-curve", s.auth(s.handleEquityCurve))
+	mux.Handle("GET /api/aggregate", s.auth(s.handleAggregate))
+	mux.Handle("GET /api/positions/open", s.auth(s.handleOpenPositions))
+	mux.Handle("GET /api/positions/closed", s.auth(s.handleClosedPositions))
+	mux.Handle("GET /api/positions/stats", s.auth(s.handleStats))
 
 	// Admin only
-	mux.Handle("GET /api/admin/friends", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleListFriends)))
-	mux.Handle("POST /api/admin/friends", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleCreateFriend)))
-	mux.Handle("POST /api/admin/cash-events", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleAdminCashEvent)))
-	mux.Handle("GET /api/admin/cash-events", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleAdminCashEvents)))
-	mux.Handle("GET /api/admin/recent-fills", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleAdminRecentFills)))
-	mux.Handle("POST /api/admin/snapshot", middleware.RequireAdmin(s.JWTSecret, http.HandlerFunc(s.handleAdminSnapshot)))
+	mux.Handle("GET /api/admin/friends", s.admin(s.handleListFriends))
+	mux.Handle("POST /api/admin/friends", s.admin(s.handleCreateFriend))
+	mux.Handle("POST /api/admin/cash-events", s.admin(s.handleAdminCashEvent))
+	mux.Handle("GET /api/admin/cash-events", s.admin(s.handleAdminCashEvents))
+	mux.Handle("GET /api/admin/recent-fills", s.admin(s.handleAdminRecentFills))
+	mux.Handle("POST /api/admin/snapshot", s.admin(s.handleAdminSnapshot))
 
 	// Health (no auth — for orchestration)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

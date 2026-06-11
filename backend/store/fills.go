@@ -129,10 +129,13 @@ func LastFillTime(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts.Int64, nil
 }
 
-// DistinctSymbolsTouched returns every symbol that has at least one fill in
-// the DB. Used by incremental sync to know which symbols to poll.
-func DistinctSymbolsTouched(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT DISTINCT symbol FROM binance_fills ORDER BY symbol`)
+// DistinctSymbolsSince returns every symbol with at least one fill at or
+// after sinceMs. Used by incremental sync to know which symbols to poll —
+// bounded by recency so the hourly poll set doesn't grow forever as old
+// symbols stop trading (each polled symbol costs a userTrades API call).
+func DistinctSymbolsSince(ctx context.Context, db *sql.DB, sinceMs int64) ([]string, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT DISTINCT symbol FROM binance_fills WHERE fill_time >= ? ORDER BY symbol`, sinceMs)
 	if err != nil {
 		return nil, err
 	}

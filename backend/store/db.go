@@ -5,11 +5,22 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
 	_ "modernc.org/sqlite"
 )
+
+// CheckpointWAL runs a TRUNCATE checkpoint, folding the -wal file back into
+// the main DB and resetting it to zero bytes. The dashboard's long-lived read
+// connections can starve SQLite's automatic checkpointing (observed: 4MB WAL
+// on the VPS while the main file sat untouched for days), so the snapshot
+// scheduler calls this periodically. Best-effort — busy_timeout applies.
+func CheckpointWAL(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
+	return err
+}
 
 // Open opens (or creates) the dashboard fund.db at path and runs migrations.
 // WAL is enabled so the hourly snapshot writer doesn't block the API readers.

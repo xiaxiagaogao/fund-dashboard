@@ -110,9 +110,12 @@ func (j *TradesSyncJob) Start(ctx context.Context, interval time.Duration) {
 //  1. **Live positionRisk** — every currently-open (and recently-open) position.
 //     Catches symbols that are still on the book.
 //
-//  2. **fund.db DISTINCT(symbol)** — anything we've ever recorded a fill for.
-//     Cheap, no API call. Catches symbols whose positions have been closed for
-//     a while but might have NEW fills since LastFillTimeBySymbol.
+//  2. **fund.db symbols with fills in the last 90d** — cheap, no API call.
+//     Catches symbols whose positions closed recently but might have NEW
+//     fills since LastFillTimeBySymbol. Bounded by recency so the poll set
+//     (one userTrades call per symbol per tick) doesn't grow forever; a
+//     symbol untraded for 90d that comes back gets re-discovered via
+//     positionRisk or income.
 //
 //  3. **/fapi/v1/income REALIZED_PNL last 2h** — catches the edge case where a
 //     brand-new symbol was opened AND closed within one sync tick, then
@@ -133,7 +136,7 @@ func (j *TradesSyncJob) symbolsToPoll(ctx context.Context) (map[string]struct{},
 		syms[r.Symbol] = struct{}{}
 	}
 
-	seen, err := store.DistinctSymbolsTouched(ctx, j.DB)
+	seen, err := store.DistinctSymbolsSince(ctx, j.DB, time.Now().Add(-90*24*time.Hour).UnixMilli())
 	if err != nil {
 		return nil, err
 	}

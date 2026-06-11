@@ -2,7 +2,9 @@ package binance
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 )
@@ -105,6 +107,29 @@ type UserTrade struct {
 	Buyer        bool
 }
 
+// parseUserTrade converts a wire row, rejecting rows whose numeric fields
+// don't parse to sane values — persisting a zero-price/zero-qty fill would
+// silently corrupt position reconstruction downstream. Callers log and skip.
+func parseUserTrade(r UserTradeRow) (UserTrade, error) {
+	price, err1 := strconv.ParseFloat(r.Price, 64)
+	qty, err2 := strconv.ParseFloat(r.Qty, 64)
+	quote, err3 := strconv.ParseFloat(r.QuoteQty, 64)
+	realized, err4 := strconv.ParseFloat(r.RealizedPnl, 64)
+	commission, err5 := strconv.ParseFloat(r.Commission, 64)
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
+		return UserTrade{}, fmt.Errorf("trade %d %s: unparseable numeric field: %w", r.ID, r.Symbol, err)
+	}
+	if price <= 0 || qty <= 0 {
+		return UserTrade{}, fmt.Errorf("trade %d %s: non-positive price/qty (%v / %v)", r.ID, r.Symbol, price, qty)
+	}
+	return UserTrade{
+		ID: r.ID, OrderID: r.OrderID, Symbol: r.Symbol, Side: r.Side,
+		PositionSide: r.PositionSide, Price: price, Qty: qty, QuoteQty: quote,
+		RealizedPnL: realized, Commission: commission, Time: r.Time,
+		Maker: r.Maker, Buyer: r.Buyer,
+	}, nil
+}
+
 // UserTradesSince returns up to `limit` fills for `symbol` after `sinceMs`,
 // page by page. Binance returns max 1000 per call.
 //
@@ -130,17 +155,12 @@ func (c *Client) UserTradesSince(ctx context.Context, symbol string, sinceMs int
 	}
 	out := make([]UserTrade, 0, len(rows))
 	for _, r := range rows {
-		price, _ := strconv.ParseFloat(r.Price, 64)
-		qty, _ := strconv.ParseFloat(r.Qty, 64)
-		quote, _ := strconv.ParseFloat(r.QuoteQty, 64)
-		realized, _ := strconv.ParseFloat(r.RealizedPnl, 64)
-		commission, _ := strconv.ParseFloat(r.Commission, 64)
-		out = append(out, UserTrade{
-			ID: r.ID, OrderID: r.OrderID, Symbol: r.Symbol, Side: r.Side,
-			PositionSide: r.PositionSide, Price: price, Qty: qty, QuoteQty: quote,
-			RealizedPnL: realized, Commission: commission, Time: r.Time,
-			Maker: r.Maker, Buyer: r.Buyer,
-		})
+		t, err := parseUserTrade(r)
+		if err != nil {
+			log.Printf("binance: skipping bad userTrades row: %v", err)
+			continue
+		}
+		out = append(out, t)
 	}
 	return out, nil
 }

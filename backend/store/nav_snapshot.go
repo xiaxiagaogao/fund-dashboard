@@ -13,6 +13,12 @@ const (
 	SnapshotCashEvent = "cash_event"
 )
 
+// MaxEventSnapshotSkew bounds how far a cash event's occurred_at may sit from
+// "now" for an at-event NAV snapshot to still be written. The equity used for
+// that snapshot is read live, so stamping it onto a heavily backdated
+// occurred_at would paint a false point into the equity-curve history.
+const MaxEventSnapshotSkew = time.Hour
+
 type NAVSnapshot struct {
 	ID              int64
 	TakenAt         int64 // unix ms
