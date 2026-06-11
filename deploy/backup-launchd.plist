@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Pulls a fund.db backup from the VPS to ~/Library/FundBackups/snapshots twice
+  a day (10:30 / 22:30 local). If the Mac is asleep at the scheduled time,
+  launchd coalesces and runs once on wake; if powered off, that run is skipped
+  — the VPS-side cron (backup-local.sh, every 6h) still has recent snapshots
+  either way.
+
+  Runs the INSTALLED copy of deploy/backup-pull.sh (not the project copy):
+  launchd agents cannot read ~/Desktop without Full Disk Access, so the
+  script, key, and snapshots all live outside it. See backup-pull.sh header
+  for install steps.
+
+  Logs: ~/Library/Logs/fund-backup.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>top.xg22.fund-backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>/Users/xiagao/Library/FundBackups/pull.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key><integer>10</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <dict>
+      <key>Hour</key><integer>22</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/Users/xiagao/Library/Logs/fund-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/xiagao/Library/Logs/fund-backup.log</string>
+</dict>
+</plist>

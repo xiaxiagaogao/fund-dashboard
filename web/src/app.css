@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(132, 204, 22, 0.04), transparent 50%),
+      radial-gradient(900px 500px at 110% 10%, rgba(99, 102, 241, 0.04), transparent 50%),
+      theme(colors.ink.950);
+    min-height: 100vh;
+  }
+  * {
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-ink-900/60 backdrop-blur ring-1 ring-ink-700/60 shadow-soft;
+  }
+  .card-tight {
+    @apply rounded-xl bg-ink-900/50 ring-1 ring-ink-700/40;
+  }
+  .label {
+    @apply text-[11px] uppercase tracking-[0.14em] text-ink-400 font-medium;
+  }
+  .stat-value {
+    @apply font-mono tabular-nums text-3xl font-semibold text-ink-50;
+  }
+  .stat-sub {
+    @apply font-mono tabular-nums text-sm text-ink-300;
+  }
+  .pos {
+    @apply text-accent-400;
+  }
+  .neg {
+    @apply text-loss-400;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ring-1;
+  }
+  .pill-pos {
+    @apply pill text-accent-400 bg-accent-500/10 ring-accent-500/20;
+  }
+  .pill-neg {
+    @apply pill text-loss-400 bg-loss-500/10 ring-loss-500/20;
+  }
+  .pill-neutral {
+    @apply pill text-ink-300 bg-ink-700/40 ring-ink-600/40;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg font-medium text-sm
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 shadow-[0_8px_24px_-12px_rgba(132,204,22,0.55)];
+  }
+  .btn-ghost {
+    @apply btn bg-ink-800/60 text-ink-100 hover:bg-ink-700/70 ring-1 ring-ink-700/60;
+  }
+  .btn-link {
+    @apply text-ink-300 hover:text-ink-100 underline-offset-4 hover:underline;
+  }
+  .input {
+    @apply w-full rounded-lg bg-ink-800/60 px-3 py-2 text-sm font-mono tabular-nums
+           text-ink-50 placeholder:text-ink-500
+           ring-1 ring-ink-700/60 focus:ring-accent-500/60 focus:outline-none transition;
+  }
+  .select {
+    @apply input appearance-none cursor-pointer;
+  }
+  .table-row-hover {
+    @apply hover:bg-ink-800/40 transition-colors;
+  }
+}

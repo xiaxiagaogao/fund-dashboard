@@ -1,0 +1,53 @@
+# Production stack for fund-dashboard.
+#
+# Co-tenants on the nofx VPS at 47.245.31.99. The contract preserved per
+# memory project_nofx_vps_cotenancy:
+#
+#   * cpus=0.5, mem_limit=512M   — dashboard cannot starve nofx
+#   * port :8090                  — separate from nofx :8080
+#   * own docker network          — no shared compose, no shared net ns
+#   * persistent fund.db          — bind mount at ./data
+#   * read .env (gitignored)      — JWT_SECRET, BINANCE_API_KEY/SECRET,
+#                                   COOKIE_SECURE=true (Cloudflare HTTPS edge)
+#
+# Deploy from project root on VPS:
+#
+#   cd /root/stacks/dashboard
+#   docker compose up -d --build
+#
+# Inspect:
+#
+#   docker compose logs -f dashboard
+#   docker compose exec dashboard dashctl status
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fund-dashboard
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - .env
+    environment:
+      COOKIE_SECURE: "true"
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
