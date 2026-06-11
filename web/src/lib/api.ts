@@ -111,18 +111,21 @@ export type StatsResponse = {
   by_symbol: SymbolPnL[];
 };
 
-export type NofxFill = {
+/** One Binance fill from fund.db's own binance_fills table (admin view). */
+export type RecentFill = {
   id: number;
-  trader_id: string;
+  trade_id: number;
+  order_id: number;
   symbol: string;
-  side: string;
+  side: 'BUY' | 'SELL' | string;
+  position_side: string;
   price: number;
-  quantity: number;
-  quote_quantity: number;
+  qty: number;
+  quote_qty: number;
   realized_pnl: number;
-  created_at: number;
-  order_action: string;
-  source: 'bot' | 'manual';
+  commission: number;
+  maker: boolean;
+  fill_time: number;
 };
 
 export class ApiError extends Error {
@@ -206,7 +209,7 @@ export const api = {
         '/api/admin/cash-events',
         { method: 'POST', body: JSON.stringify(input) }
       ),
-    nofxFills: (limit = 50) => req<NofxFill[]>('/api/admin/nofx-fills?limit=' + limit),
+    recentFills: (limit = 50) => req<RecentFill[]>('/api/admin/recent-fills?limit=' + limit),
     snapshot: () =>
       req<{ id: number; taken_at: number; total_equity: number; total_shares: number; nav: number }>(
         '/api/admin/snapshot',

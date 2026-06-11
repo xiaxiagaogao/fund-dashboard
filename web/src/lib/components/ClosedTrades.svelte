@@ -33,7 +33,8 @@
         <tbody>
           {#each visible as p}
             {@const isLong = p.side === 'LONG' || p.side === 'BUY'}
-            {@const priceChange = p.entry_price > 0 ? (p.exit_price - p.entry_price) / p.entry_price : 0}
+            {@const exitPrice = p.exit_price ?? 0}
+            {@const priceChange = p.entry_price > 0 ? (exitPrice - p.entry_price) / p.entry_price : 0}
             {@const effectiveChange = isLong ? priceChange : -priceChange}
             <tr class="table-row-hover border-t border-ink-800/60">
               <td class="py-3 px-5 font-mono font-medium text-ink-50">{p.symbol}</td>
@@ -41,7 +42,7 @@
                 <span class={isLong ? 'pill-pos' : 'pill-neg'}>{isLong ? '多' : '空'}</span>
               </td>
               <td class="py-3 px-3 text-right font-mono tabular-nums text-ink-200">{p.entry_price.toFixed(4)}</td>
-              <td class="py-3 px-3 text-right font-mono tabular-nums text-ink-200">{p.exit_price.toFixed(4)}</td>
+              <td class="py-3 px-3 text-right font-mono tabular-nums text-ink-200">{exitPrice.toFixed(4)}</td>
               <td class={'py-3 px-3 text-right font-mono tabular-nums ' + (effectiveChange > 0 ? 'pos' : effectiveChange < 0 ? 'neg' : 'text-ink-300')}>
                 {(effectiveChange > 0 ? '+' : '') + fmtPct(effectiveChange, 2)}
               </td>
@@ -50,7 +51,7 @@
               </td>
               <td class="py-3 px-5 text-right">
                 <div class="font-mono tabular-nums text-ink-100">{fmtDuration((p.exit_time ?? 0) - p.entry_time)}</div>
-                <div class="text-[11px] font-mono text-ink-500">{fmtDate(p.exit_time, true)}</div>
+                <div class="text-[11px] font-mono text-ink-500">{fmtDate(p.exit_time ?? 0, true)}</div>
               </td>
             </tr>
           {/each}

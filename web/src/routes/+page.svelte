@@ -91,8 +91,13 @@
     };
   });
 
-  // Reactive relative-time text. Re-evaluates every time `now` ticks.
-  $: snapAgeText = (now, summary ? fmtRelativeTime(summary.snapshot_at_ms) : '');
+  // Reactive relative-time text. The block references `now` so Svelte
+  // re-runs it on every clock tick.
+  let snapAgeText = '';
+  $: {
+    void now;
+    snapAgeText = summary ? fmtRelativeTime(summary.snapshot_at_ms) : '';
+  }
 </script>
 
 {#if loading}

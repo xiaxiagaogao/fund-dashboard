@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { api, type FriendRow, type NofxFill, ApiError } from '$lib/api';
+  import { api, type FriendRow, type RecentFill, ApiError } from '$lib/api';
   import { fmtUSDT, fmtSignedUSDT, fmtDate, fmtShares } from '$lib/format';
 
   type LedgerRow = {
@@ -12,7 +12,7 @@
   };
 
   let friends: FriendRow[] = [];
-  let fills: NofxFill[] = [];
+  let fills: RecentFill[] = [];
   let ledger: LedgerRow[] = [];
   let loading = true;
   let error = '';
@@ -55,10 +55,11 @@
       friends = await api.admin.listFriends();
       loadStep = '3/3 加载入金流水';
       ledger = await api.admin.listCashEvents(200);
-      // nofx fills 端点已经移除（404 OK），try/catch 静默吞下
+      // fills 面板挂了不该拖垮整页 admin — 失败时显示空表即可
       try {
-        fills = await api.admin.nofxFills(20);
+        fills = await api.admin.recentFills(20);
       } catch (e) {
+        console.error('recent-fills load failed:', e);
         fills = [];
       }
       loadStep = '完成';
@@ -280,25 +281,22 @@
     </div>
   </div>
 
-  <!-- nofx fills -->
+  <!-- Recent Binance fills (fund.db binance_fills, kept current by the hourly sync) -->
   <div class="card overflow-hidden mb-6">
     <div class="px-5 py-4 border-b border-ink-800/80 flex items-baseline justify-between">
       <div>
-        <div class="label">nofx 最近成交</div>
-        <div class="stat-sub text-ink-400 mt-1">同 Binance 账户的交易 fills · 区分 bot/manual · 朋友看不见</div>
+        <div class="label">最近成交（Binance fills）</div>
+        <div class="stat-sub text-ink-400 mt-1">fund.db binance_fills · 每小时自动同步 · 朋友看不见</div>
       </div>
-      {#if fills.length === 0}
-        <div class="text-xs text-ink-500">未挂 nofx 数据库（NOFX_DB_PATH）</div>
-      {/if}
+      <div class="text-xs text-ink-500">最近 {fills.length} 条</div>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="text-ink-400 text-xs uppercase tracking-wider">
           <tr>
             <th class="text-left py-2.5 px-5 font-medium">时间</th>
-            <th class="text-left py-2.5 px-3 font-medium">来源</th>
             <th class="text-left py-2.5 px-3 font-medium">Symbol</th>
-            <th class="text-left py-2.5 px-3 font-medium">动作</th>
+            <th class="text-left py-2.5 px-3 font-medium">方向</th>
             <th class="text-right py-2.5 px-3 font-medium">价</th>
             <th class="text-right py-2.5 px-3 font-medium">数量</th>
             <th class="text-right py-2.5 px-3 font-medium">名义 USDT</th>
@@ -308,22 +306,23 @@
         <tbody>
           {#each fills as f}
             <tr class="table-row-hover border-t border-ink-800/60">
-              <td class="py-3 px-5 font-mono text-ink-300 whitespace-nowrap">{fmtDate(f.created_at, true)}</td>
-              <td class="py-3 px-3"><span class={f.source === 'bot' ? 'pill-pos' : 'pill-neutral'}>{f.source}</span></td>
+              <td class="py-3 px-5 font-mono text-ink-300 whitespace-nowrap">{fmtDate(f.fill_time, true)}</td>
               <td class="py-3 px-3 font-mono text-ink-200">{f.symbol}</td>
               <td class="py-3 px-3">
-                <span class="text-ink-300 text-xs">{f.side}</span>
-                {#if f.order_action}<span class="text-ink-500 text-xs ml-1">· {f.order_action}</span>{/if}
+                <span class={f.side === 'BUY' ? 'pill-pos' : 'pill-neg'}>{f.side}</span>
+                {#if f.position_side && f.position_side !== 'BOTH'}
+                  <span class="text-ink-500 text-xs ml-1">· {f.position_side}</span>
+                {/if}
               </td>
               <td class="py-3 px-3 text-right font-mono tabular-nums">{f.price.toFixed(4)}</td>
-              <td class="py-3 px-3 text-right font-mono tabular-nums">{f.quantity.toFixed(4)}</td>
-              <td class="py-3 px-3 text-right font-mono tabular-nums">{fmtUSDT(f.quote_quantity, 2)}</td>
+              <td class="py-3 px-3 text-right font-mono tabular-nums">{f.qty.toFixed(4)}</td>
+              <td class="py-3 px-3 text-right font-mono tabular-nums">{fmtUSDT(f.quote_qty, 2)}</td>
               <td class={'py-3 px-5 text-right font-mono tabular-nums ' + (f.realized_pnl > 0 ? 'pos' : f.realized_pnl < 0 ? 'neg' : 'text-ink-400')}>
                 {fmtSignedUSDT(f.realized_pnl, 4)}
               </td>
             </tr>
           {:else}
-            <tr><td colspan="8" class="py-8 text-center text-ink-500 text-sm">无 fills</td></tr>
+            <tr><td colspan="7" class="py-8 text-center text-ink-500 text-sm">无 fills（等下一次小时同步，或先跑 dashctl backfill-history）</td></tr>
           {/each}
         </tbody>
       </table>
