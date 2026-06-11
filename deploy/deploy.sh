@@ -38,13 +38,25 @@ done
 
 cd "$(dirname "$0")/.."
 
-echo "==> 1/6  Probing VPS reachability"
+# Build everything HERE — the VPS has 1.6GB RAM and no swap; running
+# npm+vite+go inside docker build froze the whole box once (2026-06-12,
+# nofx included). The VPS only assembles a COPY-only image from ./dist.
+echo "==> 1/7  Building Linux binaries + SPA locally"
+mkdir -p dist
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dashboard ./cmd/dashboard
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dashctl ./cmd/dashctl
+(cd web && npm run build)
+rm -rf dist/web_build
+cp -R web/build dist/web_build
+echo "    $(du -sh dist | cut -f1) of artifacts in ./dist"
+
+echo "==> 2/7  Probing VPS reachability"
 $SSH $VPS_HOST "echo ok && uname -m && docker --version" || { echo "VPS unreachable"; exit 1; }
 
-echo "==> 2/6  Ensuring remote dirs exist"
+echo "==> 3/7  Ensuring remote dirs exist"
 $SSH $VPS_HOST "mkdir -p $REMOTE_SRC $REMOTE_STACK/data $REMOTE_STACK/nginx"
 
-echo "==> 3/6  Rsync source (skip node_modules, .svelte-kit, build, data, .env*)"
+echo "==> 4/7  Rsync source + dist artifacts (skip node_modules, .svelte-kit, build, data, backups, .env*)"
 rsync -az --delete \
     -e "$RSYNC_SSH" \
     --exclude='.git/' \
@@ -53,14 +65,15 @@ rsync -az --delete \
     --exclude='web/.svelte-kit/' \
     --exclude='web/build/' \
     --exclude='data/' \
+    --exclude='backups/' \
     --exclude='.env' \
     --exclude='.env.real' \
     ./  $VPS_HOST:$REMOTE_SRC/
 
-echo "==> 4/6  Place / refresh stack files (docker-compose, nginx vhost, .env)"
+echo "==> 5/7  Place / refresh stack files (docker-compose, nginx vhost, .env)"
 # docker-compose.yml + Dockerfile go into the stack dir alongside data/
 $SSH $VPS_HOST "cp -f $REMOTE_SRC/docker-compose.yml $REMOTE_STACK/docker-compose.yml \
-             && cp -f $REMOTE_SRC/Dockerfile         $REMOTE_STACK/Dockerfile"
+             && cp -f $REMOTE_SRC/Dockerfile.runtime $REMOTE_STACK/Dockerfile.runtime"
 
 # Create or refresh .env on VPS. On first deploy, generate a fresh
 # JWT_SECRET and lift BINANCE_* keys from the local .env so dashboard
@@ -97,7 +110,7 @@ EOF_REMOTE
 $SSH $VPS_HOST "cp -rf $REMOTE_SRC/* $REMOTE_STACK/ && rm -rf $REMOTE_STACK/deploy" || true
 
 if [ $PUSH_DB -eq 1 ]; then
-    echo "==> 5/6  --push-db: about to OVERWRITE the live VPS ledger with the local copy"
+    echo "==> 6/7  --push-db: about to OVERWRITE the live VPS ledger with the local copy"
     echo "    local : $(ls -l ./data/fund.db)"
     echo "    remote: $($SSH $VPS_HOST "ls -l $REMOTE_STACK/data/fund.db 2>/dev/null || echo '(absent)'")"
     read -r -p "    Type 'overwrite' to continue: " CONFIRM
@@ -113,16 +126,16 @@ if [ $PUSH_DB -eq 1 ]; then
     $SSH $VPS_HOST "rm -f $REMOTE_STACK/data/fund.db-wal $REMOTE_STACK/data/fund.db-shm"
     echo "    pushed; container restarts in step 6 (with --build-only it stays STOPPED)"
 else
-    echo "==> 5/6  Leaving VPS fund.db untouched (default; --push-db to overwrite)"
+    echo "==> 6/7  Leaving VPS fund.db untouched (default; --push-db to overwrite)"
 fi
 
 if [ $BUILD_ONLY -eq 1 ]; then
-    echo "==> 6/6  Build only — running 'docker compose build' on VPS"
+    echo "==> 7/7  Build only — running 'docker compose build' on VPS"
     $SSH $VPS_HOST "cd $REMOTE_STACK && docker compose build"
     exit 0
 fi
 
-echo "==> 6/6  Build + restart on VPS"
+echo "==> 7/7  Build + restart on VPS"
 $SSH $VPS_HOST "cd $REMOTE_STACK && docker compose up -d --build"
 
 echo

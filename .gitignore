@@ -3,6 +3,7 @@
 !.env.example
 data/
 backups/
+dist/
 *.db
 *.db-journal
 *.db-wal

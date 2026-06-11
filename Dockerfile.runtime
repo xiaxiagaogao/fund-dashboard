@@ -1,0 +1,21 @@
+# Thin runtime-assembly image for fund-dashboard.
+#
+# All real building happens on the dev Mac (deploy.sh step 1: Go
+# cross-compile + Vite build into ./dist). This Dockerfile only COPYs those
+# prebuilt artifacts into an Alpine base — `docker compose build` on the VPS
+# needs a few MB of memory instead of the npm+vite+go toolchain that froze
+# the 1.6GB no-swap box on 2026-06-12.
+#
+# Compare Dockerfile (full 3-stage build) — kept for reference / CI use.
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY dist/dashboard /usr/local/bin/dashboard
+COPY dist/dashctl   /usr/local/bin/dashctl
+COPY dist/web_build /app/web_build
+EXPOSE 8090
+ENV STATIC_DIR=/app/web_build
+ENV FUND_DB_PATH=/app/data/fund.db
+ENV HTTP_ADDR=:8090
+VOLUME ["/app/data"]
+ENTRYPOINT ["/usr/local/bin/dashboard"]

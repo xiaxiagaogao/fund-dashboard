@@ -24,7 +24,9 @@ services:
   dashboard:
     build:
       context: .
-      dockerfile: Dockerfile
+      # Thin COPY-only image — artifacts are built on the dev Mac by
+      # deploy.sh. Never run the full Dockerfile build on this 1.6GB box.
+      dockerfile: Dockerfile.runtime
     container_name: fund-dashboard
     restart: unless-stopped
     ports:
