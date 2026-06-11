@@ -8,11 +8,11 @@
 #   ./deploy/backup.sh                  # one-shot, timestamped filename
 #   ./deploy/backup.sh --latest         # also overwrite ./data/fund.db (DESTRUCTIVE — for restore)
 #
-# Automated backups (this script is for ad-hoc pulls into ./backups):
-#   * VPS-side : /root/stacks/dashboard/backup-local.sh via root crontab, every 6h
-#   * Mac-side : deploy/backup-pull.sh via launchd (backup-launchd.plist), twice
-#                daily into ~/Library/FundBackups/snapshots — installed copies
-#                live outside ~/Desktop (TCC blocks launchd from Desktop).
+# Backup layout:
+#   * VPS-side (automated): /root/stacks/dashboard/backup-local.sh via root
+#     crontab, every 6h, keeps ~7 days. Guards against corruption/mistakes.
+#   * Mac-side (manual, this script): run every few days to keep an offsite
+#     copy in ./backups in case the VPS disk dies. Keeps last 30.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
