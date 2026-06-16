@@ -49,6 +49,23 @@ func (s *Server) handleClosedPositions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, closed)
 }
 
+// GET /api/positions/allocation
+//
+// Capital snapshot for the friend-facing donuts: margin-vs-cash split, cross
+// leverage, and notional weight per open position. All friends may see it.
+func (s *Server) handleAllocation(w http.ResponseWriter, r *http.Request) {
+	if s.Positions == nil {
+		writeErr(w, http.StatusServiceUnavailable, "positions orchestrator not configured")
+		return
+	}
+	alloc, err := s.Positions.RefreshAllocation(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "allocation refresh: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, alloc)
+}
+
 // GET /api/positions/stats?window=N
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	if s.Positions == nil {

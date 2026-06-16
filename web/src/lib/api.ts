@@ -111,6 +111,23 @@ export type StatsResponse = {
   by_symbol: SymbolPnL[];
 };
 
+export type AllocSlice = {
+  symbol: string;
+  side: 'LONG' | 'SHORT' | string;
+  notional: number;
+  pct: number; // 0..1 share of total notional
+};
+
+export type Allocation = {
+  equity: number;
+  margin_used: number;
+  free_cash: number;
+  leverage: number;
+  notional: number;
+  positions: AllocSlice[];
+  update_time: number;
+};
+
 /** One Binance fill from fund.db's own binance_fills table (admin view). */
 export type RecentFill = {
   id: number;
@@ -181,6 +198,7 @@ export const api = {
 
   openPositions: () => req<Position[]>('/api/positions/open'),
   closedPositions: (limit = 50) => req<Position[]>('/api/positions/closed?limit=' + limit),
+  allocation: () => req<Allocation>('/api/positions/allocation'),
   stats: (window = 200) => req<StatsResponse>('/api/positions/stats?window=' + window),
 
   exportCsvUrl: () => '/api/me/export.csv',

@@ -7,16 +7,15 @@
     type Aggregate,
     type EquityPoint,
     type CashEvent,
+    type Allocation,
     type Position,
     type StatsResponse
   } from '$lib/api';
   import { fmtUSDT, fmtShares, fmtSignedUSDT, fmtSignedPct, fmtRelativeTime } from '$lib/format';
   import EquityCurve from '$lib/components/EquityCurve.svelte';
   import MetricCard from '$lib/components/MetricCard.svelte';
+  import PositionDonuts from '$lib/components/PositionDonuts.svelte';
   import FriendsTable from '$lib/components/FriendsTable.svelte';
-  import EventsTable from '$lib/components/EventsTable.svelte';
-  import StatsCards from '$lib/components/StatsCards.svelte';
-  import OpenPositions from '$lib/components/OpenPositions.svelte';
   import ClosedTrades from '$lib/components/ClosedTrades.svelte';
   import SymbolPnLBars from '$lib/components/SymbolPnLBars.svelte';
 
@@ -25,15 +24,30 @@
   let aggregate: Aggregate | null = null;
   let curve: EquityPoint[] = [];
   let events: CashEvent[] = [];
-  let openPositions: Position[] = [];
+  let alloc: Allocation | null = null;
   let closedPositions: Position[] = [];
   let stats: StatsResponse | null = null;
-  let nofxAvailable = true;
+  let positionsAvailable = true;
   let loading = true;
   let error = '';
 
+  // Collapsible secondary sections — folded by default to keep the mobile view calm.
+  let showReview = false;
+  let showMembers = false;
+
   // Ticking clock so "X 分钟前" updates without a page refresh.
   let now = Date.now();
+
+  // "我的" curve: at each snapshot, my shares as-of that moment × the NAV then.
+  // events come back ordered by occurred_at ASC.
+  $: mineValues = curve.map((pt) => {
+    let shares = 0;
+    for (const e of events) {
+      if (e.occurred_at <= pt.taken_at) shares += e.shares_delta;
+      else break;
+    }
+    return shares * pt.nav;
+  });
 
   async function load() {
     try {
@@ -50,34 +64,27 @@
       return;
     }
     try {
-      [openPositions, closedPositions, stats] = await Promise.all([
-        api.openPositions(),
+      [alloc, closedPositions, stats] = await Promise.all([
+        api.allocation(),
         api.closedPositions(100),
         api.stats(200)
       ]);
-      nofxAvailable = true;
+      positionsAvailable = true;
     } catch (e) {
-      nofxAvailable = false;
+      positionsAvailable = false;
     }
     loading = false;
   }
 
-  // Lighter periodic refresh — only re-pulls the three endpoints that
-  // genuinely change minute-to-minute. Heavy data (equity curve, events,
-  // closed trades, stats) only changes on the hour, so reloading them
-  // every 2 min would be wasteful.
+  // Light periodic refresh — only the things that move minute-to-minute.
   async function refreshLive() {
     try {
-      const [s, a, op] = await Promise.all([
-        api.mySummary(),
-        api.aggregate(),
-        api.openPositions()
-      ]);
+      const [s, a, al] = await Promise.all([api.mySummary(), api.aggregate(), api.allocation()]);
       summary = s;
       aggregate = a;
-      openPositions = op;
+      alloc = al;
     } catch {
-      // Swallow transient failures — keep stale data on screen rather than blank.
+      // Keep stale data on screen rather than blanking on a transient failure.
     }
   }
 
@@ -91,8 +98,6 @@
     };
   });
 
-  // Reactive relative-time text. The block references `now` so Svelte
-  // re-runs it on every clock tick.
   let snapAgeText = '';
   $: {
     void now;
@@ -110,79 +115,85 @@
     <h2 class="text-xl font-semibold tracking-tight">你好，{me.name}</h2>
     <div class="text-xs text-ink-400 flex items-center gap-2">
       <span class="inline-block w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" title="live · 2 分钟轮询"></span>
-      最新快照 · {snapAgeText}
+      {snapAgeText}
     </div>
   </div>
 
-  <!-- Per-friend hero stats -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <!-- Hero: just my two numbers -->
+  <div class="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
     <MetricCard
       label="我的估值"
-      value={fmtUSDT(summary.value_usdt, 2) + ' USDT'}
+      value={fmtUSDT(summary.value_usdt, 2)}
       sub={fmtShares(summary.shares, 4) + ' 份额'}
       pill={fmtSignedPct(summary.pnl_pct)}
       pillSignal={summary.pnl_pct}
     />
     <MetricCard
       label="我的 PnL"
-      value={fmtSignedUSDT(summary.pnl_usdt, 2) + ' USDT'}
+      value={fmtSignedUSDT(summary.pnl_usdt, 2)}
       valueSignal={summary.pnl_usdt}
       sub={'累计投入 ' + fmtUSDT(summary.net_deposits, 2)}
     />
-    <MetricCard
-      label="基金 NAV / share"
-      value={summary.latest_nav.toFixed(6)}
-      sub={fmtSignedPct(summary.latest_nav - 1)}
-    />
-    <MetricCard
-      label="基金总资金"
-      value={fmtUSDT(summary.latest_equity, 2) + ' USDT'}
-      sub={aggregate.friends.length + ' 位成员'}
-    />
   </div>
 
-  <!-- Equity curve -->
-  <div class="mb-6">
-    <EquityCurve points={curve} height={240} />
+  <!-- Equity curve: 我的 / 基金 -->
+  <div class="mb-5">
+    <EquityCurve points={curve} {mineValues} variant="friend" height={220} />
   </div>
 
-  <!-- Friends table -->
-  <div class="mb-8">
-    <FriendsTable rows={aggregate.friends} me={me.username} />
-  </div>
-
-  <!-- Trade transparency section -->
-  {#if nofxAvailable}
-    <div class="flex items-baseline justify-between mb-3">
-      <h3 class="text-lg font-semibold tracking-tight">交易透明度</h3>
-      <div class="text-xs text-ink-400">所有成员可见 · 数据源 nofx</div>
-    </div>
-
+  <!-- Current holdings — two donuts -->
+  {#if positionsAvailable}
     <div class="mb-5">
-      <StatsCards stats={stats?.stats ?? null} window={stats?.window ?? 0} />
-    </div>
-
-    <div class="mb-5">
-      <OpenPositions positions={openPositions} />
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-      <div class="lg:col-span-2">
-        <ClosedTrades positions={closedPositions} />
-      </div>
-      <div>
-        <SymbolPnLBars rows={stats?.by_symbol ?? []} />
-      </div>
-    </div>
-  {:else}
-    <div class="card p-6 text-ink-400 text-sm mb-6">
-      <div class="label mb-1">交易透明度</div>
-      未挂 nofx 数据库（NOFX_DB_PATH 不可达）—— 部署到 nofx VPS 上之后这块会自动激活。
+      <PositionDonuts {alloc} loading={!alloc} />
     </div>
   {/if}
 
-  <!-- My events -->
-  <div class="mb-6">
-    <EventsTable {events} />
+  <!-- Collapsible: 复盘明细 (closed trades + per-symbol) -->
+  {#if positionsAvailable}
+    <div class="card overflow-hidden mb-4">
+      <button
+        class="w-full flex items-center gap-2 px-5 py-3.5 text-left table-row-hover"
+        on:click={() => (showReview = !showReview)}
+      >
+        <span class="label">复盘明细</span>
+        <span class="text-[11px] text-ink-500">平仓记录 · 标的盈亏</span>
+        <svg
+          class={'ml-auto w-4 h-4 text-ink-400 transition-transform ' + (showReview ? 'rotate-180' : '')}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        ><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </button>
+      {#if showReview}
+        <div class="px-3 pb-4 pt-1 border-t border-ink-800/60">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-2">
+              <ClosedTrades positions={closedPositions} />
+            </div>
+            <div>
+              <SymbolPnLBars rows={stats?.by_symbol ?? []} />
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Collapsible: 成员对比 -->
+  <div class="card overflow-hidden mb-4">
+    <button
+      class="w-full flex items-center gap-2 px-5 py-3.5 text-left table-row-hover"
+      on:click={() => (showMembers = !showMembers)}
+    >
+      <span class="label">成员对比</span>
+      <span class="text-[11px] text-ink-500">{aggregate.friends.length} 位成员 · 互相可见</span>
+      <svg
+        class={'ml-auto w-4 h-4 text-ink-400 transition-transform ' + (showMembers ? 'rotate-180' : '')}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      ><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    </button>
+    {#if showMembers}
+      <div class="px-3 pb-4 pt-1 border-t border-ink-800/60">
+        <FriendsTable rows={aggregate.friends} me={me.username} />
+      </div>
+    {/if}
   </div>
 {/if}

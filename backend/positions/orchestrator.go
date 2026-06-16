@@ -50,6 +50,36 @@ type Orchestrator struct {
 	cached *cacheEntry
 
 	fetchMu sync.Mutex // single-flight: at most one Binance refresh in flight
+
+	allocMu     sync.Mutex
+	allocCached *allocEntry
+	allocFetch  sync.Mutex
+}
+
+type allocEntry struct {
+	at  time.Time
+	val Allocation
+}
+
+// Allocation is the friend-facing capital snapshot: how the pool's equity is
+// split between posted margin and idle cash (with the resulting cross
+// leverage), plus the notional weight of each open position.
+type Allocation struct {
+	Equity     float64      `json:"equity"`
+	MarginUsed float64      `json:"margin_used"`
+	FreeCash   float64      `json:"free_cash"`  // equity - margin_used (closes to equity by construction)
+	Leverage   float64      `json:"leverage"`   // total notional / equity (cross)
+	Notional   float64      `json:"notional"`   // sum of |positionAmt|*markPrice
+	Positions  []AllocSlice `json:"positions"`  // by symbol, notional desc
+	UpdateTime int64        `json:"update_time"`
+}
+
+// AllocSlice is one symbol's share of total notional exposure.
+type AllocSlice struct {
+	Symbol   string  `json:"symbol"`
+	Side     string  `json:"side"` // LONG | SHORT
+	Notional float64 `json:"notional"`
+	Pct      float64 `json:"pct"` // notional / total notional, 0..1
 }
 
 type cacheEntry struct {
@@ -101,6 +131,87 @@ func (o *Orchestrator) freshCache(maxAge time.Duration) *cacheEntry {
 		return o.cached
 	}
 	return nil
+}
+
+// Refresh-allocation: same short-cache + single-flight discipline as Refresh,
+// kept in its own cache so the open/closed handlers don't pay for the extra
+// account call and vice-versa.
+func (o *Orchestrator) RefreshAllocation(ctx context.Context) (Allocation, error) {
+	if e := o.freshAlloc(o.cacheTTL()); e != nil {
+		return e.val, nil
+	}
+	o.allocFetch.Lock()
+	defer o.allocFetch.Unlock()
+	if e := o.freshAlloc(o.cacheTTL()); e != nil {
+		return e.val, nil
+	}
+
+	val, err := o.allocationNow(ctx)
+	if err != nil {
+		if e := o.freshAlloc(maxStaleServe); e != nil {
+			log.Printf("positions: allocation refresh failed, serving %s-old cache: %v",
+				time.Since(e.at).Round(time.Second), err)
+			return e.val, nil
+		}
+		return Allocation{}, err
+	}
+	o.allocMu.Lock()
+	o.allocCached = &allocEntry{at: time.Now(), val: val}
+	o.allocMu.Unlock()
+	return val, nil
+}
+
+func (o *Orchestrator) freshAlloc(maxAge time.Duration) *allocEntry {
+	o.allocMu.Lock()
+	defer o.allocMu.Unlock()
+	if o.allocCached != nil && time.Since(o.allocCached.at) < maxAge {
+		return o.allocCached
+	}
+	return nil
+}
+
+func (o *Orchestrator) allocationNow(ctx context.Context) (Allocation, error) {
+	summ, err := o.BN.AccountSummaryNow(ctx)
+	if err != nil {
+		return Allocation{}, err
+	}
+	risks, err := o.BN.PositionRisks(ctx)
+	if err != nil {
+		return Allocation{}, err
+	}
+	return buildAllocation(summ, risks), nil
+}
+
+// buildAllocation is the pure capital-split math, factored out for testing.
+func buildAllocation(summ binance.AccountSummary, risks []binance.PositionRisk) Allocation {
+	a := Allocation{
+		Equity:     summ.Equity,
+		MarginUsed: summ.MarginUsed,
+		FreeCash:   summ.Equity - summ.MarginUsed,
+		UpdateTime: summ.UpdateTime,
+	}
+	for _, r := range risks {
+		notional := absF(r.PositionAmt) * r.MarkPrice
+		if notional <= 0 {
+			continue
+		}
+		side := "LONG"
+		if r.PositionAmt < 0 || r.PositionSide == "SHORT" {
+			side = "SHORT"
+		}
+		a.Positions = append(a.Positions, AllocSlice{Symbol: r.Symbol, Side: side, Notional: notional})
+		a.Notional += notional
+	}
+	if a.Equity > 0 {
+		a.Leverage = a.Notional / a.Equity
+	}
+	for i := range a.Positions {
+		if a.Notional > 0 {
+			a.Positions[i].Pct = a.Positions[i].Notional / a.Notional
+		}
+	}
+	sort.Slice(a.Positions, func(i, j int) bool { return a.Positions[i].Notional > a.Positions[j].Notional })
+	return a
 }
 
 func (o *Orchestrator) cacheTTL() time.Duration {

@@ -13,9 +13,10 @@
 //	  GET  /api/me/export.csv      — my statement
 //	  GET  /api/equity-curve       — pool NAV time series (?from=ms&to=ms, defaults to 30d)
 //	  GET  /api/aggregate          — pool-wide aggregated stats (per-friend table; friends mutually visible)
-//	  GET  /api/positions/open     — Binance live positionRisk
-//	  GET  /api/positions/closed   — reconstructed from fund.db binance_fills
-//	  GET  /api/positions/stats    — aggregate win rate + per-symbol breakdown
+//	  GET  /api/positions/open       — Binance live positionRisk
+//	  GET  /api/positions/closed     — reconstructed from fund.db binance_fills
+//	  GET  /api/positions/allocation — capital split + leverage + notional by symbol
+//	  GET  /api/positions/stats      — aggregate win rate + per-symbol breakdown
 //
 //	Admin only:
 //	  GET  /api/admin/friends             — list
@@ -103,6 +104,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/aggregate", s.auth(s.handleAggregate))
 	mux.Handle("GET /api/positions/open", s.auth(s.handleOpenPositions))
 	mux.Handle("GET /api/positions/closed", s.auth(s.handleClosedPositions))
+	mux.Handle("GET /api/positions/allocation", s.auth(s.handleAllocation))
 	mux.Handle("GET /api/positions/stats", s.auth(s.handleStats))
 
 	// Admin only
