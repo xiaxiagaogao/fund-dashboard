@@ -111,6 +111,14 @@ export type StatsResponse = {
   by_symbol: SymbolPnL[];
 };
 
+export type DayPnL = {
+  date: string; // YYYY-MM-DD (China wall-clock)
+  realized_pnl: number;
+  commission: number;
+  net: number;
+  fills: number;
+};
+
 export type AllocSlice = {
   symbol: string;
   side: 'LONG' | 'SHORT' | string;
@@ -200,6 +208,7 @@ export const api = {
   closedPositions: (limit = 50) => req<Position[]>('/api/positions/closed?limit=' + limit),
   allocation: () => req<Allocation>('/api/positions/allocation'),
   stats: (window = 200) => req<StatsResponse>('/api/positions/stats?window=' + window),
+  dailyPnl: (days = 120) => req<DayPnL[]>('/api/positions/daily-pnl?days=' + days),
 
   exportCsvUrl: () => '/api/me/export.csv',
 

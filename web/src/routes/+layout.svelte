@@ -57,6 +57,12 @@
           >
           {#if me.is_admin}
             <a
+              href="/review"
+              class={'px-3 py-1.5 rounded-lg ' +
+                ($page.url.pathname.startsWith('/review') ? 'bg-ink-800 text-ink-50' : 'text-ink-300 hover:text-ink-100')}
+              >复盘</a
+            >
+            <a
               href="/admin"
               class={'px-3 py-1.5 rounded-lg ' +
                 ($page.url.pathname.startsWith('/admin') ? 'bg-ink-800 text-ink-50' : 'text-ink-300 hover:text-ink-100')}

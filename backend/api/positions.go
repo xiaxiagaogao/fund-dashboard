@@ -3,9 +3,21 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/xiagao/fund-dashboard/backend/positions"
+	"github.com/xiagao/fund-dashboard/backend/store"
 )
+
+// reportLoc is the wall-clock zone used to bucket trades into calendar days on
+// the 复盘 heatmap. Operator is in China; fall back to a fixed +8 if tzdata is
+// somehow missing.
+var reportLoc = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
+		return loc
+	}
+	return time.FixedZone("CST", 8*3600)
+}()
 
 // Position handlers are powered by the Binance-first orchestrator
 // (backend/positions). Binance is the source of truth — independent of nofx
@@ -64,6 +76,27 @@ func (s *Server) handleAllocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, alloc)
+}
+
+// GET /api/positions/daily-pnl?days=N
+//
+// Per-day net realized PnL from fund.db binance_fills — powers the 复盘
+// calendar heatmap. Reads fund.db directly (no Binance), so it works even
+// when live keys are absent. Admin-only (operator's review tool).
+func (s *Server) handleDailyPnL(w http.ResponseWriter, r *http.Request) {
+	days := 120
+	if q := r.URL.Query().Get("days"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 730 {
+			days = n
+		}
+	}
+	sinceMs := time.Now().AddDate(0, 0, -days).UnixMilli()
+	fills, err := store.ListFillsSince(r.Context(), s.DB, sinceMs)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "fills query failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, positions.DailyPnL(fills, reportLoc))
 }
 
 // GET /api/positions/stats?window=N

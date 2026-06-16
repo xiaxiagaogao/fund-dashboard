@@ -106,6 +106,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/positions/closed", s.auth(s.handleClosedPositions))
 	mux.Handle("GET /api/positions/allocation", s.auth(s.handleAllocation))
 	mux.Handle("GET /api/positions/stats", s.auth(s.handleStats))
+	mux.Handle("GET /api/positions/daily-pnl", s.admin(s.handleDailyPnL))
 
 	// Admin only
 	mux.Handle("GET /api/admin/friends", s.admin(s.handleListFriends))
