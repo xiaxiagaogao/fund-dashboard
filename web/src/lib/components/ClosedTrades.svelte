@@ -1,69 +1,57 @@
 <script lang="ts">
   import type { Position } from '$lib/api';
-  import { fmtDate, fmtDuration, fmtSignedUSDT, fmtPct } from '$lib/format';
+  import { fmtDuration, fmtSignedUSDT } from '$lib/format';
 
   export let positions: Position[] = [];
   export let limit = 20;
 
   $: visible = positions.slice(0, limit);
   $: hasMore = positions.length > limit;
+  $: totalPnl = positions.reduce((s, p) => s + p.realized_pnl, 0);
+
+  function fmtPx(v: number): string {
+    const dp = v < 10 ? 3 : v < 1000 ? 1 : 0;
+    return v.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  }
 </script>
 
-<div class="card overflow-hidden">
-  <div class="px-5 py-4 border-b border-ink-800/80">
-    <div class="label">最近平仓</div>
-    <div class="stat-sub text-ink-400 mt-1">入/出 · 已实现 PnL · 持仓时长</div>
+<div class="card p-4 sm:p-5">
+  <div class="flex items-baseline justify-between mb-2.5">
+    <div class="text-[13px] font-bold">平仓记录</div>
+    <div class="text-[10px] text-ink-500 font-mono">{positions.length} 笔 · {fmtSignedUSDT(totalPnl, 0)}</div>
   </div>
+
   {#if visible.length === 0}
-    <div class="py-12 text-center text-ink-500 text-sm">还没有已平仓的交易</div>
+    <div class="py-10 text-center text-ink-500 text-sm">还没有已平仓的交易</div>
   {:else}
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="text-ink-400 text-xs uppercase tracking-wider">
-          <tr>
-            <th class="text-left py-2.5 px-5 font-medium">Symbol</th>
-            <th class="text-left py-2.5 px-3 font-medium">方向</th>
-            <th class="text-right py-2.5 px-3 font-medium">入场</th>
-            <th class="text-right py-2.5 px-3 font-medium">出场</th>
-            <th class="text-right py-2.5 px-3 font-medium">变动 %</th>
-            <th class="text-right py-2.5 px-3 font-medium">PnL</th>
-            <th class="text-right py-2.5 px-5 font-medium">持仓时长</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each visible as p}
-            {@const isLong = p.side === 'LONG' || p.side === 'BUY'}
-            {@const exitPrice = p.exit_price ?? 0}
-            {@const priceChange = p.entry_price > 0 ? (exitPrice - p.entry_price) / p.entry_price : 0}
-            {@const effectiveChange = isLong ? priceChange : -priceChange}
-            <tr class="table-row-hover border-t border-ink-800/60">
-              <td class="py-3 px-5 font-mono font-medium text-ink-50">{p.symbol}</td>
-              <td class="py-3 px-3">
-                <span class={isLong ? 'pill-pos' : 'pill-neg'}>{isLong ? '多' : '空'}</span>
-              </td>
-              <td class="py-3 px-3 text-right font-mono tabular-nums text-ink-200">{p.entry_price.toFixed(4)}</td>
-              <td class="py-3 px-3 text-right font-mono tabular-nums text-ink-200">{exitPrice.toFixed(4)}</td>
-              <td class={'py-3 px-3 text-right font-mono tabular-nums ' + (effectiveChange > 0 ? 'pos' : effectiveChange < 0 ? 'neg' : 'text-ink-300')}>
-                {(effectiveChange > 0 ? '+' : '') + fmtPct(effectiveChange, 2)}
-              </td>
-              <td class={'py-3 px-3 text-right font-mono tabular-nums font-medium ' + (p.realized_pnl > 0 ? 'pos' : p.realized_pnl < 0 ? 'neg' : 'text-ink-300')}>
-                {fmtSignedUSDT(p.realized_pnl, 4)}
-              </td>
-              <td class="py-3 px-5 text-right">
-                <div class="font-mono tabular-nums text-ink-100">{fmtDuration((p.exit_time ?? 0) - p.entry_time)}</div>
-                <div class="text-[11px] font-mono text-ink-500">{fmtDate(p.exit_time ?? 0, true)}</div>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+    <div class="flex flex-col">
+      {#each visible as p}
+        {@const isLong = p.side === 'LONG' || p.side === 'BUY'}
+        <div class="flex items-center gap-2.5 py-2.5 border-b border-white/[0.04] last:border-0">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[13px] font-bold">{p.symbol.replace('USDT', '')}</span>
+              <span class={'text-[9px] rounded px-1 border ' + (isLong ? 'text-accent-400 border-accent-500/30' : 'text-loss-400 border-loss-500/30')}>
+                {isLong ? '多' : '空'}
+              </span>
+            </div>
+            <div class="text-[10px] text-ink-500 font-mono mt-1 whitespace-nowrap">
+              {fmtPx(p.entry_price)} → {fmtPx(p.exit_price ?? 0)}
+            </div>
+          </div>
+          <div class="ml-auto text-right">
+            <div class={'font-mono text-[13px] font-semibold ' + (p.realized_pnl >= 0 ? 'pos' : 'neg')}>
+              {fmtSignedUSDT(p.realized_pnl, 0)}
+            </div>
+            <div class="text-[10px] text-ink-500 font-mono mt-1">{fmtDuration((p.exit_time ?? 0) - p.entry_time)}</div>
+          </div>
+        </div>
+      {/each}
     </div>
     {#if hasMore}
-      <div class="px-5 py-3 border-t border-ink-800/60 text-center">
-        <button class="btn-link text-xs" on:click={() => (limit = positions.length)}>
-          展开全部 {positions.length} 条
-        </button>
-      </div>
+      <button class="btn-link text-xs w-full text-center pt-3" on:click={() => (limit = positions.length)}>
+        展开全部 {positions.length} 条
+      </button>
     {/if}
   {/if}
 </div>

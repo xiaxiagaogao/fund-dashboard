@@ -2,15 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens ported from the Claude design canvas. Kept as CSS variables so
+   SVG fills / inline styles can reference the exact same oklch values the
+   Tailwind palette uses. */
+:root {
+  --bg: oklch(0.165 0.006 240);
+  --panel: oklch(0.205 0.008 240);
+  --panel2: oklch(0.235 0.01 240);
+  --line: oklch(1 0 0 / 0.08);
+  --hi: oklch(0.97 0.004 240);
+  --mid: oklch(0.73 0.008 240);
+  --lo: oklch(0.54 0.01 240);
+  --pos: oklch(0.80 0.115 168);
+  --pos-bright: oklch(0.84 0.12 168);
+  --pos-tint: oklch(0.80 0.115 168 / 0.12);
+  --neg: oklch(0.70 0.155 24);
+  --neg-bright: oklch(0.74 0.16 24);
+  --neg-tint: oklch(0.70 0.155 24 / 0.12);
+}
+
 @layer base {
   html {
     color-scheme: dark;
   }
   body {
     background:
-      radial-gradient(1200px 600px at 10% -10%, rgba(132, 204, 22, 0.04), transparent 50%),
-      radial-gradient(900px 500px at 110% 10%, rgba(99, 102, 241, 0.04), transparent 50%),
-      theme(colors.ink.950);
+      radial-gradient(900px 480px at 8% -8%, oklch(0.80 0.115 168 / 0.05), transparent 55%),
+      radial-gradient(800px 460px at 108% 4%, oklch(0.62 0.06 250 / 0.05), transparent 55%),
+      var(--bg);
     min-height: 100vh;
   }
   * {
@@ -20,13 +39,13 @@
 
 @layer components {
   .card {
-    @apply rounded-2xl bg-ink-900/60 backdrop-blur ring-1 ring-ink-700/60 shadow-soft;
+    @apply rounded-2xl bg-ink-900 border border-white/[0.08];
   }
   .card-tight {
-    @apply rounded-xl bg-ink-900/50 ring-1 ring-ink-700/40;
+    @apply rounded-xl bg-ink-900 border border-white/[0.06];
   }
   .label {
-    @apply text-[11px] uppercase tracking-[0.14em] text-ink-400 font-medium;
+    @apply text-[11px] uppercase tracking-[0.14em] text-ink-500 font-medium;
   }
   .stat-value {
     @apply font-mono tabular-nums text-3xl font-semibold text-ink-50;
@@ -41,39 +60,49 @@
     @apply text-loss-400;
   }
   .pill {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ring-1;
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-mono;
   }
   .pill-pos {
-    @apply pill text-accent-400 bg-accent-500/10 ring-accent-500/20;
+    @apply pill text-accent-400 bg-accent-500/[0.12];
   }
   .pill-neg {
-    @apply pill text-loss-400 bg-loss-500/10 ring-loss-500/20;
+    @apply pill text-loss-400 bg-loss-500/[0.12];
   }
   .pill-neutral {
-    @apply pill text-ink-300 bg-ink-700/40 ring-ink-600/40;
+    @apply pill text-ink-300 bg-white/[0.05];
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg font-medium text-sm
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl font-medium text-sm
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 shadow-[0_8px_24px_-12px_rgba(132,204,22,0.55)];
+    @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 shadow-glow;
   }
   .btn-ghost {
-    @apply btn bg-ink-800/60 text-ink-100 hover:bg-ink-700/70 ring-1 ring-ink-700/60;
+    @apply btn bg-white/[0.04] text-ink-100 hover:bg-white/[0.08] border border-white/[0.08];
   }
   .btn-link {
     @apply text-ink-300 hover:text-ink-100 underline-offset-4 hover:underline;
   }
+  /* Segmented control button (我的 / 基金, range toggles). */
+  .seg {
+    @apply px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors;
+  }
+  .seg-on {
+    @apply seg bg-ink-700 text-ink-50;
+  }
+  .seg-off {
+    @apply seg bg-transparent text-ink-500 hover:text-ink-300;
+  }
   .input {
-    @apply w-full rounded-lg bg-ink-800/60 px-3 py-2 text-sm font-mono tabular-nums
+    @apply w-full rounded-xl bg-ink-800 px-3 py-2 text-sm font-mono tabular-nums
            text-ink-50 placeholder:text-ink-500
-           ring-1 ring-ink-700/60 focus:ring-accent-500/60 focus:outline-none transition;
+           border border-white/[0.08] focus:border-accent-500/60 focus:outline-none transition;
   }
   .select {
     @apply input appearance-none cursor-pointer;
   }
   .table-row-hover {
-    @apply hover:bg-ink-800/40 transition-colors;
+    @apply hover:bg-white/[0.03] transition-colors;
   }
 }

@@ -5,123 +5,105 @@
   export let alloc: Allocation | null = null;
   export let loading = false;
 
-  // Categorical palette for the notional donut — distinct on the dark theme.
-  const PALETTE = ['#a3e635', '#60a5fa', '#f59e0b', '#22d3ee', '#c084fc', '#fb7185'];
-  const OTHER = '#71717a';
+  const R = 70;
+  const C = 2 * Math.PI * R;
+  const TEAL = ['oklch(0.86 0.10 168)', 'oklch(0.78 0.115 172)', 'oklch(0.70 0.115 178)', 'oklch(0.62 0.105 186)'];
+  const SHORT = 'oklch(0.70 0.155 24)';
 
-  type Seg = { label: string; value: number; color: string; pct: number; dash: string; offset: number };
+  type Slice = { label?: string; side?: string; pct: number; color: string; dash: string; offset: string };
 
-  // segments turns weighted items into stroke-dasharray donut segments.
-  // Circle r=15.915 → circumference≈100, so each segment's dash length is its
-  // percentage. offset=25 starts the first segment at 12 o'clock.
-  function segments(items: { label: string; value: number; color: string }[]): Seg[] {
-    const total = items.reduce((s, it) => s + it.value, 0);
+  // Gap of 4 user units between slices, rounded caps — straight from the design.
+  function donut(items: { label?: string; side?: string; pct: number; color: string }[]): Slice[] {
     let acc = 0;
-    return items.map((it) => {
-      const pct = total > 0 ? (it.value / total) * 100 : 0;
-      const seg: Seg = { ...it, pct, dash: `${pct.toFixed(2)} ${(100 - pct).toFixed(2)}`, offset: 25 - acc };
-      acc += pct;
-      return seg;
+    return items.map((s) => {
+      const len = Math.max(0, s.pct * C - 4);
+      const o: Slice = { ...s, dash: `${len.toFixed(2)} ${(C - len).toFixed(2)}`, offset: (-acc * C).toFixed(2) };
+      acc += s.pct;
+      return o;
     });
   }
 
-  // Capital: margin posted vs idle cash.
-  $: capitalItems = alloc
-    ? [
-        { label: '保证金占用', value: Math.max(alloc.margin_used, 0), color: '#a3e635' },
-        { label: '闲置现金', value: Math.max(alloc.free_cash, 0), color: '#3f3f46' }
-      ]
+  $: capital = alloc
+    ? donut([
+        { pct: alloc.equity > 0 ? Math.max(0, alloc.margin_used) / alloc.equity : 0, color: 'oklch(0.80 0.115 168)' },
+        { pct: alloc.equity > 0 ? Math.max(0, alloc.free_cash) / alloc.equity : 1, color: 'oklch(0.34 0.012 240)' }
+      ])
     : [];
-  $: capitalSegs = segments(capitalItems);
 
-  // Notional by symbol, tail grouped into 其他 beyond 6 slices.
+  // Notional by symbol, tail beyond 6 grouped into 其他.
   $: notionalItems = (() => {
     const ps = alloc?.positions ?? [];
-    if (ps.length <= 6) return ps.map((p, i) => ({ label: p.symbol, value: p.notional, color: PALETTE[i % PALETTE.length], side: p.side, pct: p.pct }));
-    const head = ps.slice(0, 5).map((p, i) => ({ label: p.symbol, value: p.notional, color: PALETTE[i], side: p.side, pct: p.pct }));
+    let ti = 0;
+    const colorFor = (side: string) => (side === 'SHORT' ? SHORT : TEAL[ti++ % TEAL.length]);
+    if (ps.length <= 6) return ps.map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
+    const head = ps.slice(0, 5).map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
     const tail = ps.slice(5);
-    const tailVal = tail.reduce((s, p) => s + p.notional, 0);
-    const tailPct = tail.reduce((s, p) => s + p.pct, 0);
-    return [...head, { label: `其他 ${tail.length}`, value: tailVal, color: OTHER, side: '', pct: tailPct }];
+    return [...head, { label: `其他 ${tail.length}`, side: '', pct: tail.reduce((s, p) => s + p.pct, 0), color: 'oklch(0.40 0.012 240)' }];
   })();
-  $: notionalSegs = segments(notionalItems);
+  $: notional = donut(notionalItems);
 
   $: isFlat = !!alloc && (alloc.positions?.length ?? 0) === 0;
 </script>
 
-<div class="card p-5">
-  <div class="label mb-4">当前持仓</div>
+<div class="card p-4 sm:p-5">
+  <div class="text-[13px] font-bold mb-3.5">当前持仓</div>
 
   {#if loading && !alloc}
     <div class="py-10 text-center text-ink-500 text-sm">加载中…</div>
   {:else if !alloc}
     <div class="py-10 text-center text-ink-500 text-sm">持仓数据暂不可用</div>
   {:else}
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+    <div class="flex gap-2 justify-around mb-4">
       <!-- 资金配置 -->
-      <div class="flex flex-col items-center">
-        <div class="text-[11px] text-ink-400 mb-3">资金配置</div>
-        <div class="relative w-[128px] h-[128px]">
-          <svg viewBox="0 0 42 42" class="w-full h-full -rotate-0">
-            <circle cx="21" cy="21" r="15.915" fill="none" stroke="#27272a" stroke-width="4.5" />
-            {#each capitalSegs as s}
-              <circle cx="21" cy="21" r="15.915" fill="none" stroke={s.color} stroke-width="4.5"
-                stroke-dasharray={s.dash} stroke-dashoffset={s.offset} />
-            {/each}
-          </svg>
-          <div class="absolute inset-0 flex flex-col items-center justify-center">
-            <span class="font-mono text-2xl text-ink-50 leading-none">{alloc.leverage.toFixed(2)}x</span>
-            <span class="text-[10px] text-ink-500 mt-1">全仓杠杆</span>
-          </div>
-        </div>
-        <div class="mt-3 space-y-1.5">
-          {#each capitalSegs as s}
-            <div class="flex items-center gap-2 text-xs text-ink-300">
-              <span class="w-2.5 h-2.5 rounded-sm" style="background:{s.color}"></span>
-              <span>{s.label}</span>
-              <span class="font-mono text-ink-400 ml-auto pl-3">{fmtPct(s.pct / 100, 0)}</span>
-            </div>
+      <div class="relative w-[130px] h-[130px] flex-none">
+        <svg viewBox="0 0 180 180" class="w-[130px] h-[130px]" style="transform:rotate(-90deg)">
+          <circle cx="90" cy="90" r={R} fill="none" stroke="oklch(0.24 0.008 240)" stroke-width="16" />
+          {#each capital as s}
+            <circle cx="90" cy="90" r={R} fill="none" stroke={s.color} stroke-width="16" stroke-linecap="round"
+              stroke-dasharray={s.dash} stroke-dashoffset={s.offset} />
           {/each}
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <div class="text-[9px] text-ink-500 tracking-wider">杠杆</div>
+          <div class="font-mono text-[22px] font-semibold leading-tight">{alloc.leverage.toFixed(2)}×</div>
+          <div class="text-[9px] text-ink-300 font-mono">占 {alloc.equity > 0 ? fmtPct(alloc.margin_used / alloc.equity, 0) : '0%'}</div>
         </div>
       </div>
-
       <!-- 持仓分布(名义) -->
-      <div class="flex flex-col items-center">
-        <div class="text-[11px] text-ink-400 mb-3">持仓分布 · 名义</div>
-        <div class="relative w-[128px] h-[128px]">
-          <svg viewBox="0 0 42 42" class="w-full h-full">
-            <circle cx="21" cy="21" r="15.915" fill="none" stroke="#27272a" stroke-width="4.5" />
-            {#each notionalSegs as s}
-              <circle cx="21" cy="21" r="15.915" fill="none" stroke={s.color} stroke-width="4.5"
-                stroke-dasharray={s.dash} stroke-dashoffset={s.offset} />
-            {/each}
-          </svg>
-          <div class="absolute inset-0 flex flex-col items-center justify-center">
-            {#if isFlat}
-              <span class="text-xs text-ink-400">空仓</span>
-            {:else}
-              <span class="font-mono text-xl text-ink-50 leading-none">{alloc.positions.length}</span>
-              <span class="text-[10px] text-ink-500 mt-1">个持仓</span>
-            {/if}
-          </div>
+      <div class="relative w-[130px] h-[130px] flex-none">
+        <svg viewBox="0 0 180 180" class="w-[130px] h-[130px]" style="transform:rotate(-90deg)">
+          <circle cx="90" cy="90" r={R} fill="none" stroke="oklch(0.24 0.008 240)" stroke-width="16" />
+          {#each notional as s}
+            <circle cx="90" cy="90" r={R} fill="none" stroke={s.color} stroke-width="16" stroke-linecap="round"
+              stroke-dasharray={s.dash} stroke-dashoffset={s.offset} />
+          {/each}
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <div class="text-[9px] text-ink-500 tracking-wider">名义敞口</div>
+          {#if isFlat}
+            <div class="text-sm text-ink-400 mt-1">空仓</div>
+          {:else}
+            <div class="font-mono text-base font-semibold leading-tight">{fmtUSDT(alloc.notional, 0)}</div>
+          {/if}
         </div>
-        {#if !isFlat}
-          <div class="mt-3 space-y-1.5 w-full max-w-[180px]">
-            {#each notionalItems as it}
-              <div class="flex items-center gap-2 text-xs text-ink-300">
-                <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{it.color}"></span>
-                <span class="font-mono truncate">{it.label}</span>
-                {#if it.side}<span class={'text-[10px] ' + (it.side === 'LONG' ? 'pos' : 'neg')}>{it.side === 'LONG' ? '多' : '空'}</span>{/if}
-                <span class="font-mono text-ink-400 ml-auto pl-2">{fmtPct(it.pct, 0)}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
       </div>
     </div>
 
-    <div class="mt-4 pt-3 border-t border-ink-800/60 flex justify-between text-[11px] text-ink-500 font-mono">
-      <span>净值 {fmtUSDT(alloc.equity, 0)} · 名义 {fmtUSDT(alloc.notional, 0)} USDT</span>
+    {#if !isFlat}
+      <div class="flex flex-col gap-2">
+        {#each notionalItems as l}
+          <div class="flex items-center gap-2 text-xs">
+            <span class="w-2 h-2 rounded-sm flex-none" style="background:{l.color}"></span>
+            <span class="text-ink-300">{l.label}</span>
+            {#if l.side}<span class="text-[9px] text-ink-500 border border-white/[0.08] rounded px-1">{l.side === 'LONG' ? '多' : '空'}</span>{/if}
+            <span class="ml-auto font-mono text-ink-50">{fmtPct(l.pct, 1)}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <div class="mt-3.5 pt-3 border-t border-white/[0.06] text-[11px] text-ink-500 font-mono">
+      净值 {fmtUSDT(alloc.equity, 0)} · 名义 {fmtUSDT(alloc.notional, 0)} USDT
     </div>
   {/if}
 </div>

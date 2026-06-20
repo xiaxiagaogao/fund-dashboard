@@ -47,11 +47,12 @@
 
   function cellStyle(c: Cell): string {
     if (!c) return 'background:transparent';
-    if (!c.has) return 'background:#18181b'; // in-range, no trades
-    if (Math.abs(c.net) < 1e-9) return 'background:#3f3f46';
-    const t = Math.min(1, Math.abs(c.net) / maxAbs);
-    const a = (0.28 + 0.72 * t).toFixed(2);
-    return c.net > 0 ? `background:rgba(132,204,22,${a})` : `background:rgba(239,68,68,${a})`;
+    if (!c.has) return 'background:oklch(0.245 0.008 240)'; // in-range, no trades
+    if (Math.abs(c.net) < 1e-9) return 'background:oklch(0.30 0.008 240)';
+    const k = Math.min(1, Math.abs(c.net) / maxAbs);
+    return c.net > 0
+      ? `background:oklch(${(0.50 + 0.30 * k).toFixed(3)} ${(0.09 + 0.045 * k).toFixed(3)} 168)`
+      : `background:oklch(${(0.48 + 0.18 * k).toFixed(3)} ${(0.10 + 0.05 * k).toFixed(3)} 24)`;
   }
   function cellTitle(c: Cell): string {
     if (!c || !c.has) return c ? `${c.date} · 无交易` : '';
@@ -81,9 +82,9 @@
     </div>
     <div class="flex items-center gap-1.5 text-[11px] text-ink-500">
       <span>亏</span>
-      <span class="w-3 h-3 rounded-sm" style="background:rgba(239,68,68,0.85)"></span>
-      <span class="w-3 h-3 rounded-sm" style="background:#3f3f46"></span>
-      <span class="w-3 h-3 rounded-sm" style="background:rgba(132,204,22,0.85)"></span>
+      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.62 0.16 24)"></span>
+      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.245 0.008 240)"></span>
+      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.74 0.12 168)"></span>
       <span>盈</span>
     </div>
   </div>
@@ -105,7 +106,7 @@
           {#each weeks as col}
             <div class="flex flex-col gap-[3px]">
               {#each col as cell}
-                <div class="w-3 h-3 rounded-sm" style={cellStyle(cell)} title={cellTitle(cell)}></div>
+                <div class="w-3 h-3 rounded-[3px]" style={cellStyle(cell)} title={cellTitle(cell)}></div>
               {/each}
             </div>
           {/each}

@@ -7,17 +7,11 @@
     type Aggregate,
     type EquityPoint,
     type CashEvent,
-    type Allocation,
-    type Position,
-    type StatsResponse
+    type Allocation
   } from '$lib/api';
-  import { fmtUSDT, fmtShares, fmtSignedUSDT, fmtSignedPct, fmtRelativeTime } from '$lib/format';
+  import { fmtUSDT, fmtShares, fmtSignedUSDT, fmtSignedPct } from '$lib/format';
   import EquityCurve from '$lib/components/EquityCurve.svelte';
-  import MetricCard from '$lib/components/MetricCard.svelte';
   import PositionDonuts from '$lib/components/PositionDonuts.svelte';
-  import FriendsTable from '$lib/components/FriendsTable.svelte';
-  import ClosedTrades from '$lib/components/ClosedTrades.svelte';
-  import SymbolPnLBars from '$lib/components/SymbolPnLBars.svelte';
 
   let me: Me | null = null;
   let summary: Summary | null = null;
@@ -25,21 +19,12 @@
   let curve: EquityPoint[] = [];
   let events: CashEvent[] = [];
   let alloc: Allocation | null = null;
-  let closedPositions: Position[] = [];
-  let stats: StatsResponse | null = null;
   let positionsAvailable = true;
   let loading = true;
   let error = '';
 
-  // Collapsible secondary sections — folded by default to keep the mobile view calm.
-  let showReview = false;
-  let showMembers = false;
-
-  // Ticking clock so "X 分钟前" updates without a page refresh.
-  let now = Date.now();
-
-  // "我的" curve: at each snapshot, my shares as-of that moment × the NAV then.
-  // events come back ordered by occurred_at ASC.
+  // "我的" curve: my shares as-of each snapshot × NAV then; invest line = my
+  // cumulative net deposits as-of each snapshot. events come ASC by occurred_at.
   $: mineValues = curve.map((pt) => {
     let shares = 0;
     for (const e of events) {
@@ -48,6 +33,18 @@
     }
     return shares * pt.nav;
   });
+  $: investValues = curve.map((pt) => {
+    let net = 0;
+    for (const e of events) {
+      if (e.occurred_at <= pt.taken_at) net += e.type === 'deposit' ? e.amount_usdt : -e.amount_usdt;
+      else break;
+    }
+    return net;
+  });
+
+  $: rankedMembers = aggregate
+    ? aggregate.friends.slice().sort((a, b) => b.value_usdt - a.value_usdt)
+    : [];
 
   async function load() {
     try {
@@ -64,11 +61,7 @@
       return;
     }
     try {
-      [alloc, closedPositions, stats] = await Promise.all([
-        api.allocation(),
-        api.closedPositions(100),
-        api.stats(200)
-      ]);
+      alloc = await api.allocation();
       positionsAvailable = true;
     } catch (e) {
       positionsAvailable = false;
@@ -76,7 +69,6 @@
     loading = false;
   }
 
-  // Light periodic refresh — only the things that move minute-to-minute.
   async function refreshLive() {
     try {
       const [s, a, al] = await Promise.all([api.mySummary(), api.aggregate(), api.allocation()]);
@@ -84,25 +76,15 @@
       aggregate = a;
       alloc = al;
     } catch {
-      // Keep stale data on screen rather than blanking on a transient failure.
+      // keep stale data on transient failures
     }
   }
 
   onMount(() => {
     load();
-    const pollHandle = setInterval(refreshLive, 2 * 60 * 1000);
-    const tickHandle = setInterval(() => (now = Date.now()), 1000);
-    return () => {
-      clearInterval(pollHandle);
-      clearInterval(tickHandle);
-    };
+    const h = setInterval(refreshLive, 2 * 60 * 1000);
+    return () => clearInterval(h);
   });
-
-  let snapAgeText = '';
-  $: {
-    void now;
-    snapAgeText = summary ? fmtRelativeTime(summary.snapshot_at_ms) : '';
-  }
 </script>
 
 {#if loading}
@@ -110,90 +92,72 @@
 {:else if error}
   <div class="card p-6 text-loss-400">{error}</div>
 {:else if me && summary && aggregate}
-  <!-- Header -->
-  <div class="mb-3 flex items-baseline justify-between">
-    <h2 class="text-xl font-semibold tracking-tight">你好，{me.name}</h2>
-    <div class="text-xs text-ink-400 flex items-center gap-2">
-      <span class="inline-block w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse" title="live · 2 分钟轮询"></span>
-      {snapAgeText}
+  <div class="hidden md:block mb-6">
+    <div class="text-[11px] text-ink-500 tracking-[0.16em] uppercase mb-1.5">朋友视图 · 我的份额</div>
+    <h1 class="text-[25px] font-extrabold tracking-tight m-0">我的看板</h1>
+  </div>
+
+  <div class="flex flex-col gap-3.5 md:gap-4">
+    <!-- Hero + two mini cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div class="col-span-2 relative overflow-hidden rounded-2xl border border-white/[0.08] p-5 md:p-6"
+        style="background:linear-gradient(155deg,oklch(0.22 0.012 168 / 0.55),var(--panel))">
+        <div class="absolute inset-0 pointer-events-none" style="background:radial-gradient(360px 180px at 100% 0%, oklch(0.80 0.115 168 / 0.11), transparent 60%)"></div>
+        <div class="label">我的估值</div>
+        <div class="flex items-baseline gap-2.5 mt-2.5">
+          <div class="font-mono text-[34px] md:text-[42px] font-semibold tracking-tight leading-none">{fmtUSDT(summary.value_usdt, 2)}</div>
+          <div class="text-xs md:text-[13px] text-ink-300 font-semibold">USDT</div>
+        </div>
+        <div class="flex items-center gap-3 mt-3.5">
+          <span class={summary.pnl_pct >= 0 ? 'pill-pos' : 'pill-neg'}>{fmtSignedPct(summary.pnl_pct)}</span>
+          <span class="font-mono text-xs text-ink-300">{fmtShares(summary.shares, 0)} 份额</span>
+        </div>
+      </div>
+
+      <div class="card p-4 md:p-5 flex flex-col justify-center">
+        <div class="label">总收益 PnL</div>
+        <div class={'font-mono text-xl md:text-[28px] font-semibold mt-2 tracking-tight ' + (summary.pnl_usdt >= 0 ? 'pos' : 'neg')}>
+          {fmtSignedUSDT(summary.pnl_usdt, 0)}
+        </div>
+        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">累计投入 {fmtUSDT(summary.net_deposits, 0)}</div>
+      </div>
+
+      <div class="card p-4 md:p-5 flex flex-col justify-center">
+        <div class="label">基金净值 NAV</div>
+        <div class="font-mono text-xl md:text-[28px] font-semibold mt-2 tracking-tight">{summary.latest_nav.toFixed(4)}</div>
+        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">基金总权益 {fmtUSDT(summary.latest_equity, 0)}</div>
+      </div>
     </div>
-  </div>
 
-  <!-- Hero: just my two numbers -->
-  <div class="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
-    <MetricCard
-      label="我的估值"
-      value={fmtUSDT(summary.value_usdt, 2)}
-      sub={fmtShares(summary.shares, 4) + ' 份额'}
-      pill={fmtSignedPct(summary.pnl_pct)}
-      pillSignal={summary.pnl_pct}
-    />
-    <MetricCard
-      label="我的 PnL"
-      value={fmtSignedUSDT(summary.pnl_usdt, 2)}
-      valueSignal={summary.pnl_usdt}
-      sub={'累计投入 ' + fmtUSDT(summary.net_deposits, 2)}
-    />
-  </div>
+    <!-- Equity curve -->
+    <EquityCurve points={curve} {mineValues} {investValues} height={220} />
 
-  <!-- Equity curve: 我的 / 基金 -->
-  <div class="mb-5">
-    <EquityCurve points={curve} {mineValues} variant="friend" height={220} />
-  </div>
-
-  <!-- Current holdings — two donuts -->
-  {#if positionsAvailable}
-    <div class="mb-5">
+    <!-- Current holdings -->
+    {#if positionsAvailable}
       <PositionDonuts {alloc} loading={!alloc} />
-    </div>
-  {/if}
+    {/if}
 
-  <!-- Collapsible: 复盘明细 (closed trades + per-symbol) -->
-  {#if positionsAvailable}
-    <div class="card overflow-hidden mb-4">
-      <button
-        class="w-full flex items-center gap-2 px-5 py-3.5 text-left table-row-hover"
-        on:click={() => (showReview = !showReview)}
-      >
-        <span class="label">复盘明细</span>
-        <span class="text-[11px] text-ink-500">平仓记录 · 标的盈亏</span>
-        <svg
-          class={'ml-auto w-4 h-4 text-ink-400 transition-transform ' + (showReview ? 'rotate-180' : '')}
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        ><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      </button>
-      {#if showReview}
-        <div class="px-3 pb-4 pt-1 border-t border-ink-800/60">
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div class="lg:col-span-2">
-              <ClosedTrades positions={closedPositions} />
-            </div>
-            <div>
-              <SymbolPnLBars rows={stats?.by_symbol ?? []} />
+    <!-- Members -->
+    <div class="card p-4 sm:p-5">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[13px] font-bold">成员对比</div>
+        <div class="label">按估值</div>
+      </div>
+      <div class="flex flex-col gap-0.5">
+        {#each rankedMembers as m, i}
+          <div class={'flex items-center gap-2.5 py-2.5 px-1.5 rounded-[9px] ' + (m.username === me.username ? 'bg-accent-500/[0.05]' : '')}>
+            <div class="w-4 font-mono text-xs text-ink-500 flex-none">{i + 1}</div>
+            <span class="text-[13px] font-semibold truncate">{m.name}</span>
+            {#if m.username === me.username}
+              <span class="text-[9px] text-accent-400 border border-accent-500/30 rounded px-1 flex-none">我</span>
+            {/if}
+            <div class="ml-auto font-mono text-[13px] font-semibold">{fmtUSDT(m.value_usdt, 0)}</div>
+            <div class="w-[58px] flex-none text-right">
+              <span class={m.pnl_pct >= 0 ? 'pill-pos' : 'pill-neg'}>{fmtSignedPct(m.pnl_pct)}</span>
             </div>
           </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- Collapsible: 成员对比 -->
-  <div class="card overflow-hidden mb-4">
-    <button
-      class="w-full flex items-center gap-2 px-5 py-3.5 text-left table-row-hover"
-      on:click={() => (showMembers = !showMembers)}
-    >
-      <span class="label">成员对比</span>
-      <span class="text-[11px] text-ink-500">{aggregate.friends.length} 位成员 · 互相可见</span>
-      <svg
-        class={'ml-auto w-4 h-4 text-ink-400 transition-transform ' + (showMembers ? 'rotate-180' : '')}
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-      ><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-    </button>
-    {#if showMembers}
-      <div class="px-3 pb-4 pt-1 border-t border-ink-800/60">
-        <FriendsTable rows={aggregate.friends} me={me.username} />
+        {/each}
       </div>
-    {/if}
+    </div>
   </div>
 {/if}

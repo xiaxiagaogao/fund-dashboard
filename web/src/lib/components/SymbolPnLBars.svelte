@@ -4,37 +4,27 @@
 
   export let rows: SymbolPnL[] = [];
 
-  // Scale: use the max absolute PnL so the bar widths feel proportional.
   $: maxAbs = rows.reduce((m, r) => Math.max(m, Math.abs(r.total_pnl)), 0) || 1;
 </script>
 
-<div class="card overflow-hidden">
-  <div class="px-5 py-4 border-b border-ink-800/80">
-    <div class="label">按品种 PnL</div>
-    <div class="stat-sub text-ink-400 mt-1">哪些品种是 alpha · 哪些是 drag</div>
-  </div>
+<div class="card p-4 sm:p-5">
+  <div class="text-[13px] font-bold mb-3.5">按标的盈亏</div>
   {#if rows.length === 0}
-    <div class="py-12 text-center text-ink-500 text-sm">没有已平仓数据</div>
+    <div class="py-10 text-center text-ink-500 text-sm">没有已平仓数据</div>
   {:else}
-    <div class="divide-y divide-ink-800/60">
+    <div class="flex flex-col gap-3">
       {#each rows as r}
-        {@const pct = (Math.abs(r.total_pnl) / maxAbs) * 100}
-        {@const isWin = r.total_pnl > 0}
-        <div class="px-5 py-3 flex items-center gap-4">
-          <div class="w-24 font-mono font-medium text-ink-50 text-sm">{r.symbol.replace('USDT', '')}</div>
-          <div class="flex-1 relative h-7 rounded-lg bg-ink-800/40 overflow-hidden">
-            <div
-              class={'absolute top-0 bottom-0 left-0 ' + (isWin ? 'bg-accent-500/70' : 'bg-loss-500/70')}
-              style={`width: ${pct.toFixed(2)}%`}
-            ></div>
-            <div class="relative h-full flex items-center justify-between px-3 text-xs font-mono">
-              <span class="text-ink-100 text-shadow-sm">
-                {r.trades} 单 · 胜率 {fmtPct(r.win_rate, 0)}
-              </span>
-              <span class={isWin ? 'pos font-semibold' : 'neg font-semibold'}>
-                {fmtSignedUSDT(r.total_pnl, 2)}
-              </span>
+        {@const isWin = r.total_pnl >= 0}
+        <div>
+          <div class="flex items-baseline justify-between mb-1.5">
+            <div class="flex items-baseline gap-2">
+              <span class="text-[13px] font-bold">{r.symbol.replace('USDT', '')}</span>
+              <span class="text-[10px] text-ink-500 font-mono whitespace-nowrap">{r.trades} 笔 · 胜 {fmtPct(r.win_rate, 0)}</span>
             </div>
+            <span class={'font-mono text-[13px] font-semibold ' + (isWin ? 'pos' : 'neg')}>{fmtSignedUSDT(r.total_pnl, 0)}</span>
+          </div>
+          <div class="h-1.5 rounded-full overflow-hidden" style="background:oklch(0.26 0.008 240)">
+            <div class="h-full rounded-full" style="width:{((Math.abs(r.total_pnl) / maxAbs) * 100).toFixed(1)}%;background:{isWin ? 'oklch(0.78 0.115 168)' : 'oklch(0.70 0.155 24)'}"></div>
           </div>
         </div>
       {/each}

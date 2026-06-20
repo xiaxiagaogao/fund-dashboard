@@ -1,199 +1,136 @@
 <script lang="ts">
-  import { fmtUSDT, fmtDate, fmtSignedPct } from '$lib/format';
+  import { fmtUSDT, fmtDate } from '$lib/format';
   import type { EquityPoint } from '$lib/api';
 
   export let points: EquityPoint[] = [];
-  /**
-   * 'friend' shows a 我的 / 基金 toggle (my USDT value vs NAV performance);
-   * 'fund' shows the operator's NAV / Equity toggle.
-   */
-  export let variant: 'friend' | 'fund' = 'fund';
-  /** My per-point value (shares-as-of-point × NAV), aligned 1:1 with points. Only used in the 'friend' variant. */
+  /** My per-point value (shares-as-of-point × NAV), aligned 1:1 with points. */
   export let mineValues: number[] | null = null;
-  /** Which series to draw. */
-  export let mode: 'mine' | 'nav' | 'equity' = variant === 'friend' ? 'mine' : 'nav';
-  export let height = 220;
+  /** My cumulative invested cost per point (for the dashed baseline in 我的 mode). */
+  export let investValues: number[] | null = null;
+  export let mode: 'mine' | 'nav' = 'mine';
+  export let height = 200;
+  export let glow = true;
 
-  $: isMoney = mode !== 'nav'; // mine + equity are USDT; nav is per-share
+  // Catmull-Rom → cubic bézier smoothing (from the design canvas).
+  function smooth(pts: { x: number; y: number }[]): string {
+    if (pts.length < 2) return pts.length ? `M${pts[0].x} ${pts[0].y}` : '';
+    let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }
 
-  $: data = points.map((p, i) => ({
-    x: p.taken_at,
-    y: mode === 'nav' ? p.nav : mode === 'mine' ? (mineValues?.[i] ?? 0) : p.total_equity,
-    src: p.source
-  }));
-
-  $: hasData = data.length >= 2;
-  $: first = hasData ? data[0].y : 0;
-  $: last = hasData ? data[data.length - 1].y : 0;
-
-  // The pill ALWAYS shows performance (NAV-based PnL) so it stays meaningful
-  // whether the user is looking at the equity curve (where deltas include
-  // deposit/withdraw steps) or the NAV curve. Otherwise a $1000 deposit on a
-  // $1000 pool would render the pill as "+100%" even though no money was made.
-  $: navFirst = hasData ? points[0].nav : 0;
-  $: navLast = hasData ? points[points.length - 1].nav : 0;
-  $: deltaPct = navFirst > 0 ? (navLast - navFirst) / navFirst : 0;
-
-  // Bounds with a tiny padding so the curve doesn't kiss the edges.
-  $: xMin = hasData ? data[0].x : 0;
-  $: xMax = hasData ? data[data.length - 1].x : 1;
-  $: yVals = data.map((d) => d.y);
-  $: yMin = hasData ? Math.min(...yVals) : 0;
-  $: yMax = hasData ? Math.max(...yVals) : 1;
-  $: ySpan = yMax - yMin || 1;
-  $: yLo = yMin - ySpan * 0.08;
-  $: yHi = yMax + ySpan * 0.08;
-
-  const W = 1000; // virtual coords; SVG scales via viewBox
+  const W = 1000, PT = 16, PB = 22;
   $: H = height;
+  $: hasData = points.length >= 2;
 
-  function xS(x: number): number {
-    const span = xMax - xMin || 1;
-    return ((x - xMin) / span) * (W - 24) + 12;
+  // top = the series we draw; bot = the area floor / dashed reference line.
+  $: topV = points.map((p, i) => (mode === 'mine' ? mineValues?.[i] ?? 0 : p.nav));
+  $: botV = points.map((p, i) => (mode === 'mine' ? investValues?.[i] ?? topV[i] : 1.0));
+  $: showInvest = mode === 'mine' && !!investValues;
+
+  $: x0 = hasData ? points[0].taken_at : 0;
+  $: x1 = hasData ? points[points.length - 1].taken_at : 1;
+  $: lo = hasData ? Math.min(...topV, ...botV) : 0;
+  $: hi = hasData ? Math.max(...topV, ...botV) : 1;
+  $: pad = (hi - lo) * 0.12 || 1;
+  $: yMin = lo - pad;
+  $: yMax = hi + pad;
+
+  function mapX(t: number): number {
+    return ((t - x0) / (x1 - x0 || 1)) * W;
   }
-  function yS(y: number): number {
-    const span = yHi - yLo || 1;
-    return H - ((y - yLo) / span) * (H - 24) - 12;
+  function mapY(v: number): number {
+    return H - PB - ((v - yMin) / (yMax - yMin || 1)) * (H - PT - PB);
   }
+  $: topPts = points.map((p, i) => ({ x: mapX(p.taken_at), y: mapY(topV[i]) }));
+  $: botPts = points.map((p, i) => ({ x: mapX(p.taken_at), y: mapY(botV[i]) }));
+  $: eqLine = smooth(topPts);
+  $: eqArea = (() => {
+    if (!hasData) return '';
+    let a = smooth(topPts);
+    a += ` L ${botPts[botPts.length - 1].x.toFixed(1)} ${botPts[botPts.length - 1].y.toFixed(1)}`;
+    for (let i = botPts.length - 2; i >= 0; i--) a += ` L ${botPts[i].x.toFixed(1)} ${botPts[i].y.toFixed(1)}`;
+    return a + ' Z';
+  })();
+  $: investLine = botPts.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  $: endDot = hasData ? topPts[topPts.length - 1] : { x: 0, y: 0 };
+  $: xTicks = hasData ? [0, 0.33, 0.66, 1].map((f) => points[Math.round(f * (points.length - 1))].taken_at) : [];
 
-  $: line = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xS(d.x).toFixed(1)} ${yS(d.y).toFixed(1)}`).join(' ');
-  $: area =
-    hasData
-      ? `${line} L ${xS(data[data.length - 1].x).toFixed(1)} ${H} L ${xS(data[0].x).toFixed(1)} ${H} Z`
-      : '';
-
-  // hover state
-  let hover: { x: number; y: number; pt: { x: number; y: number; src: string } } | null = null;
-
+  let hover: { x: number; y: number; t: number; v: number } | null = null;
   function onMove(e: MouseEvent) {
     if (!hasData) return;
     const svg = e.currentTarget as SVGSVGElement;
     const rect = svg.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * W;
-    // nearest by x
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < data.length; i++) {
-      const d = Math.abs(xS(data[i].x) - px);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < topPts.length; i++) {
+      const d = Math.abs(topPts[i].x - px);
+      if (d < bestD) { bestD = d; best = i; }
     }
-    hover = { x: xS(data[best].x), y: yS(data[best].y), pt: data[best] };
-  }
-  function onLeave() {
-    hover = null;
+    hover = { x: topPts[best].x, y: topPts[best].y, t: points[best].taken_at, v: topV[best] };
   }
 </script>
 
-<div class="card p-5">
-  <div class="flex items-start justify-between gap-4 mb-4">
-    <div>
-      <div class="label">
-        {#if mode === 'mine'}我的估值（USDT）{:else if mode === 'nav'}NAV / 每份额价值{:else}基金总资金（USDT）{/if}
-      </div>
-      <div class="flex items-baseline gap-3 mt-1">
-        <div class="stat-value">
-          {isMoney ? fmtUSDT(last, 2) : last.toFixed(6)}
+<div class="card p-4 sm:p-5">
+  <div class="flex items-center justify-between gap-4 mb-3">
+    <div class="text-[13px] font-bold">净值曲线</div>
+    <div class="flex items-center gap-3">
+      {#if showInvest}
+        <div class="hidden sm:flex items-center gap-3 text-[11px] text-ink-300">
+          <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-0.5 rounded" style="background:var(--pos)"></span>估值</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-3.5 border-t border-dashed" style="border-color:var(--lo)"></span>投入</span>
         </div>
-        {#if hasData}
-          <span class={deltaPct >= 0 ? 'pill-pos' : 'pill-neg'}>
-            {fmtSignedPct(deltaPct)}
-          </span>
-        {/if}
-      </div>
-      <div class="stat-sub mt-1 text-ink-400">
-        {#if mode === 'mine'}
-          我的份额 × NAV · 含我的入金/赎回
-        {:else if mode === 'nav'}
-          反映真实表现 · 不受入金影响
-        {:else}
-          总规模 · 包含成员入金/赎回事件
-        {/if}
-      </div>
-      <div class="stat-sub mt-0.5 text-ink-500 text-[11px]">
-        {data.length} 个数据点{#if hasData} · {fmtDate(xMin, true)} → {fmtDate(xMax, true)}{/if}
-      </div>
-    </div>
-    <div class="flex gap-1">
-      {#if variant === 'friend'}
-        <button
-          class={'btn px-2.5 py-1 text-xs ' + (mode === 'mine' ? 'btn-primary' : 'btn-ghost')}
-          on:click={() => (mode = 'mine')}>我的</button
-        >
-        <button
-          class={'btn px-2.5 py-1 text-xs ' + (mode === 'nav' ? 'btn-primary' : 'btn-ghost')}
-          on:click={() => (mode = 'nav')}>基金</button
-        >
-      {:else}
-        <button
-          class={'btn px-2.5 py-1 text-xs ' + (mode === 'equity' ? 'btn-primary' : 'btn-ghost')}
-          on:click={() => (mode = 'equity')}>Equity</button
-        >
-        <button
-          class={'btn px-2.5 py-1 text-xs ' + (mode === 'nav' ? 'btn-primary' : 'btn-ghost')}
-          on:click={() => (mode = 'nav')}>NAV</button
-        >
       {/if}
+      <div class="flex gap-1 p-[3px] rounded-[10px]" style="background:oklch(0.18 0.008 240)">
+        <button class={mode === 'mine' ? 'seg-on' : 'seg-off'} on:click={() => (mode = 'mine')}>我的</button>
+        <button class={mode === 'nav' ? 'seg-on' : 'seg-off'} on:click={() => (mode = 'nav')}>基金</button>
+      </div>
     </div>
   </div>
 
   {#if !hasData}
-    <div class="h-[{H}px] flex items-center justify-center text-ink-500 text-sm">
-      还没有足够的快照数据 —— 等下一次 hourly snapshot 或者手工触发一次
+    <div class="flex items-center justify-center text-ink-500 text-sm" style="height:{H}px">
+      还没有足够的快照数据
     </div>
   {:else}
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      class="w-full"
-      style="height: {H}px"
-      preserveAspectRatio="none"
-      on:mousemove={onMove}
-      on:mouseleave={onLeave}
-      role="img"
-      aria-label="equity curve"
-    >
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full block overflow-visible" style="height:{H}px"
+      preserveAspectRatio="none" on:mousemove={onMove} on:mouseleave={() => (hover = null)} role="img" aria-label="净值曲线">
       <defs>
-        <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="#84cc16" stop-opacity="0.28" />
-          <stop offset="100%" stop-color="#84cc16" stop-opacity="0" />
+        <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="oklch(0.80 0.115 168)" stop-opacity="0.30" />
+          <stop offset="100%" stop-color="oklch(0.80 0.115 168)" stop-opacity="0.01" />
         </linearGradient>
+        <filter id="eqGlow" x="-20%" y="-40%" width="140%" height="180%">
+          <feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
-
-      <!-- baseline reference (first point) -->
-      <line
-        x1="12"
-        x2={W - 12}
-        y1={yS(first)}
-        y2={yS(first)}
-        stroke="#3f3f46"
-        stroke-dasharray="3 5"
-        stroke-width="1"
-        opacity="0.6"
-      />
-
-      <path d={area} fill="url(#grad)" />
-      <path d={line} fill="none" stroke="#a3e635" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-
-      <!-- cash event markers -->
-      {#each data as d}
-        {#if d.src === 'cash_event'}
-          <circle cx={xS(d.x)} cy={yS(d.y)} r="3.5" fill="#e4e4e7" stroke="#18181b" stroke-width="1.2" />
-        {/if}
-      {/each}
-
-      {#if hover}
-        <line x1={hover.x} x2={hover.x} y1="0" y2={H} stroke="#52525b" stroke-width="1" />
-        <circle cx={hover.x} cy={hover.y} r="4" fill="#a3e635" stroke="#09090b" stroke-width="1.5" />
+      <path d={eqArea} fill="url(#eqGrad)" stroke="none" />
+      {#if showInvest}
+        <path d={investLine} fill="none" stroke="var(--lo)" stroke-width="1.5" stroke-dasharray="5 5" vector-effect="non-scaling-stroke" />
+      {:else}
+        <line x1="0" x2={W} y1={mapY(1.0)} y2={mapY(1.0)} stroke="var(--lo)" stroke-width="1" stroke-dasharray="4 5" opacity="0.6" />
       {/if}
+      {#if glow}
+        <path d={eqLine} fill="none" stroke="oklch(0.84 0.12 168)" stroke-width="2.5" vector-effect="non-scaling-stroke" filter="url(#eqGlow)" opacity="0.9" />
+      {/if}
+      <path d={eqLine} fill="none" stroke="oklch(0.86 0.12 168)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+      {#if hover}
+        <line x1={hover.x} x2={hover.x} y1="0" y2={H} stroke="var(--mid)" stroke-width="1" opacity="0.5" />
+      {/if}
+      <circle cx={(hover ?? endDot).x} cy={(hover ?? endDot).y} r="4" fill="oklch(0.90 0.10 168)" stroke="var(--panel)" stroke-width="2" />
     </svg>
-
-    {#if hover}
-      <div class="mt-2 text-xs font-mono text-ink-300 flex justify-between">
-        <span>{fmtDate(hover.pt.x, true)}{hover.pt.src === 'cash_event' ? ' · 入金事件' : ''}</span>
-        <span class="text-ink-100">{isMoney ? fmtUSDT(hover.pt.y, 2) + ' USDT' : hover.pt.y.toFixed(6)}</span>
-      </div>
-    {/if}
+    <div class="flex justify-between mt-1.5">
+      {#if hover}
+        <span class="text-[10px] text-ink-400 font-mono">{fmtDate(hover.t, true)}</span>
+        <span class="text-[10px] text-ink-100 font-mono">{mode === 'nav' ? hover.v.toFixed(4) : fmtUSDT(hover.v, 2) + ' USDT'}</span>
+      {:else}
+        {#each xTicks as t}<span class="text-[10px] text-ink-500 font-mono">{fmtDate(t)}</span>{/each}
+      {/if}
+    </div>
   {/if}
 </div>
