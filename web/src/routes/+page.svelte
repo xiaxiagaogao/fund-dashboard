@@ -7,11 +7,13 @@
     type Aggregate,
     type EquityPoint,
     type CashEvent,
-    type Allocation
+    type Allocation,
+    type Position
   } from '$lib/api';
   import { fmtUSDT, fmtShares, fmtSignedUSDT, fmtSignedPct } from '$lib/format';
   import EquityCurve from '$lib/components/EquityCurve.svelte';
   import PositionDonuts from '$lib/components/PositionDonuts.svelte';
+  import ClosedTrades from '$lib/components/ClosedTrades.svelte';
 
   let me: Me | null = null;
   let summary: Summary | null = null;
@@ -19,6 +21,7 @@
   let curve: EquityPoint[] = [];
   let events: CashEvent[] = [];
   let alloc: Allocation | null = null;
+  let closedPositions: Position[] = [];
   let positionsAvailable = true;
   let loading = true;
   let error = '';
@@ -61,7 +64,7 @@
       return;
     }
     try {
-      alloc = await api.allocation();
+      [alloc, closedPositions] = await Promise.all([api.allocation(), api.closedPositions(50)]);
       positionsAvailable = true;
     } catch (e) {
       positionsAvailable = false;
@@ -159,5 +162,10 @@
         {/each}
       </div>
     </div>
+
+    <!-- Trade transparency: read-only recent closes -->
+    {#if positionsAvailable && closedPositions.length > 0}
+      <ClosedTrades positions={closedPositions} limit={8} />
+    {/if}
   </div>
 {/if}
