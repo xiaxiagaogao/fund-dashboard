@@ -18,7 +18,7 @@
 <div class="card p-4 sm:p-5">
   <div class="flex items-baseline justify-between mb-2.5">
     <div class="text-[13px] font-bold">平仓记录</div>
-    <div class="text-[10px] text-ink-500 font-mono">{positions.length} 笔 · {fmtSignedUSDT(totalPnl, 0)}</div>
+    <div class="text-[10px] text-ink-500 font-mono">{positions.length} 笔 · {fmtSignedUSDT(totalPnl, 2)}</div>
   </div>
 
   {#if visible.length === 0}
@@ -41,7 +41,7 @@
           </div>
           <div class="ml-auto text-right">
             <div class={'font-mono text-[13px] font-semibold ' + (p.realized_pnl >= 0 ? 'pos' : 'neg')}>
-              {fmtSignedUSDT(p.realized_pnl, 0)}
+              {fmtSignedUSDT(p.realized_pnl, 2)}
             </div>
             <div class="text-[10px] text-ink-500 font-mono mt-1">{fmtDuration((p.exit_time ?? 0) - p.entry_time)}</div>
           </div>

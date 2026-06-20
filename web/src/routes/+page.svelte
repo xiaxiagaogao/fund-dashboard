@@ -120,15 +120,15 @@
       <div class="card p-4 md:p-5 flex flex-col justify-center">
         <div class="label">总收益 PnL</div>
         <div class={'font-mono text-xl md:text-[28px] font-semibold mt-2 tracking-tight ' + (summary.pnl_usdt >= 0 ? 'pos' : 'neg')}>
-          {fmtSignedUSDT(summary.pnl_usdt, 0)}
+          {fmtSignedUSDT(summary.pnl_usdt, 2)}
         </div>
-        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">累计投入 {fmtUSDT(summary.net_deposits, 0)}</div>
+        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">累计投入 {fmtUSDT(summary.net_deposits, 2)}</div>
       </div>
 
       <div class="card p-4 md:p-5 flex flex-col justify-center">
         <div class="label">基金净值 NAV</div>
         <div class="font-mono text-xl md:text-[28px] font-semibold mt-2 tracking-tight">{summary.latest_nav.toFixed(4)}</div>
-        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">基金总权益 {fmtUSDT(summary.latest_equity, 0)}</div>
+        <div class="text-[10px] md:text-[11px] text-ink-500 mt-1.5 font-mono">基金总权益 {fmtUSDT(summary.latest_equity, 2)}</div>
       </div>
     </div>
 
@@ -154,7 +154,7 @@
             {#if m.username === me.username}
               <span class="text-[9px] text-accent-400 border border-accent-500/30 rounded px-1 flex-none">我</span>
             {/if}
-            <div class="ml-auto font-mono text-[13px] font-semibold">{fmtUSDT(m.value_usdt, 0)}</div>
+            <div class="ml-auto font-mono text-[13px] font-semibold">{fmtUSDT(m.value_usdt, 2)}</div>
             <div class="w-[58px] flex-none text-right">
               <span class={m.pnl_pct >= 0 ? 'pill-pos' : 'pill-neg'}>{fmtSignedPct(m.pnl_pct)}</span>
             </div>

@@ -21,7 +21,7 @@
               <span class="text-[13px] font-bold">{r.symbol.replace('USDT', '')}</span>
               <span class="text-[10px] text-ink-500 font-mono whitespace-nowrap">{r.trades} 笔 · 胜 {fmtPct(r.win_rate, 0)}</span>
             </div>
-            <span class={'font-mono text-[13px] font-semibold ' + (isWin ? 'pos' : 'neg')}>{fmtSignedUSDT(r.total_pnl, 0)}</span>
+            <span class={'font-mono text-[13px] font-semibold ' + (isWin ? 'pos' : 'neg')}>{fmtSignedUSDT(r.total_pnl, 2)}</span>
           </div>
           <div class="h-1.5 rounded-full overflow-hidden" style="background:oklch(0.26 0.008 240)">
             <div class="h-full rounded-full" style="width:{((Math.abs(r.total_pnl) / maxAbs) * 100).toFixed(1)}%;background:{isWin ? 'oklch(0.78 0.115 168)' : 'oklch(0.70 0.155 24)'}"></div>
