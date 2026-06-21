@@ -3,11 +3,13 @@
   import { fmtDuration, fmtSignedUSDT } from '$lib/format';
 
   export let positions: Position[] = [];
-  export let limit = 20;
+  /** How many rows are visible before the block scrolls internally. */
+  export let maxRows = 10;
 
-  $: visible = positions.slice(0, limit);
-  $: hasMore = positions.length > limit;
+  const ROW_PX = 60; // measured row height; 10 rows + a peek of the next
+
   $: totalPnl = positions.reduce((s, p) => s + p.realized_pnl, 0);
+  $: scroll = positions.length > maxRows;
 
   function fmtPx(v: number): string {
     const dp = v < 10 ? 3 : v < 1000 ? 1 : 0;
@@ -21,11 +23,12 @@
     <div class="text-[10px] text-ink-500 font-mono">{positions.length} 笔 · {fmtSignedUSDT(totalPnl, 2)}</div>
   </div>
 
-  {#if visible.length === 0}
+  {#if positions.length === 0}
     <div class="py-10 text-center text-ink-500 text-sm">还没有已平仓的交易</div>
   {:else}
-    <div class="flex flex-col">
-      {#each visible as p}
+    <div class={'flex flex-col ' + (scroll ? 'overflow-y-auto -mr-1.5 pr-1.5' : '')}
+      style={scroll ? `max-height:${maxRows * ROW_PX}px` : ''}>
+      {#each positions as p}
         {@const isLong = p.side === 'LONG' || p.side === 'BUY'}
         <div class="flex items-center gap-2.5 py-2.5 border-b border-white/[0.04] last:border-0">
           <div class="min-w-0">
@@ -48,10 +51,5 @@
         </div>
       {/each}
     </div>
-    {#if hasMore}
-      <button class="btn-link text-xs w-full text-center pt-3" on:click={() => (limit = positions.length)}>
-        展开全部 {positions.length} 条
-      </button>
-    {/if}
   {/if}
 </div>

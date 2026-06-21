@@ -3,8 +3,13 @@
   import { fmtSignedUSDT, fmtPct } from '$lib/format';
 
   export let rows: SymbolPnL[] = [];
+  /** How many rows are visible before the block scrolls internally. */
+  export let maxRows = 10;
+
+  const ROW_PX = 44; // measured row height incl. gap; 10 rows + a peek of the next
 
   $: maxAbs = rows.reduce((m, r) => Math.max(m, Math.abs(r.total_pnl)), 0) || 1;
+  $: scroll = rows.length > maxRows;
 </script>
 
 <div class="card p-4 sm:p-5">
@@ -12,7 +17,8 @@
   {#if rows.length === 0}
     <div class="py-10 text-center text-ink-500 text-sm">没有已平仓数据</div>
   {:else}
-    <div class="flex flex-col gap-3">
+    <div class={'flex flex-col gap-3 ' + (scroll ? 'overflow-y-auto -mr-1.5 pr-1.5' : '')}
+      style={scroll ? `max-height:${maxRows * ROW_PX}px` : ''}>
       {#each rows as r}
         {@const isWin = r.total_pnl >= 0}
         <div>

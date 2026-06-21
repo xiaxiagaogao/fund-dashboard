@@ -165,7 +165,7 @@
 
     <!-- Trade transparency: read-only recent closes -->
     {#if positionsAvailable && closedPositions.length > 0}
-      <ClosedTrades positions={closedPositions} limit={8} />
+      <ClosedTrades positions={closedPositions} />
     {/if}
   </div>
 {/if}

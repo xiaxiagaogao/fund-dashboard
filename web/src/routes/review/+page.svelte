@@ -82,7 +82,7 @@
       <OpenPositions positions={openPositions} />
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 md:gap-4">
-        <div class="lg:col-span-2"><ClosedTrades positions={closedPositions} limit={40} /></div>
+        <div class="lg:col-span-2"><ClosedTrades positions={closedPositions} /></div>
         <div><SymbolPnLBars rows={stats?.by_symbol ?? []} /></div>
       </div>
     {:else}
