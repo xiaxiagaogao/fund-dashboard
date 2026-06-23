@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EquityPoint } from '$lib/api';
-  import { fmtPct, fmtDate } from '$lib/format';
+  import { fmtPct, fmtDate, despike } from '$lib/format';
 
   export let points: EquityPoint[] = [];
   export let height = 120;
@@ -17,11 +17,14 @@
     return d;
   }
 
+  // Filter deposit-timing spikes before computing drawdown — an artifact spike
+  // up would otherwise reset the running peak and inflate the drawdown after it.
+  $: nav = despike(points.map((p) => p.nav));
   $: dd = (() => {
     let peak = -Infinity;
-    return points.map((p) => {
-      peak = Math.max(peak, p.nav);
-      return { x: p.taken_at, y: peak > 0 ? p.nav / peak - 1 : 0 };
+    return points.map((p, i) => {
+      peak = Math.max(peak, nav[i]);
+      return { x: p.taken_at, y: peak > 0 ? nav[i] / peak - 1 : 0 };
     });
   })();
   $: hasData = dd.length >= 2;

@@ -6,7 +6,6 @@
     type Summary,
     type Aggregate,
     type EquityPoint,
-    type CashEvent,
     type Allocation,
     type Position
   } from '$lib/api';
@@ -19,31 +18,11 @@
   let summary: Summary | null = null;
   let aggregate: Aggregate | null = null;
   let curve: EquityPoint[] = [];
-  let events: CashEvent[] = [];
   let alloc: Allocation | null = null;
   let closedPositions: Position[] = [];
   let positionsAvailable = true;
   let loading = true;
   let error = '';
-
-  // "我的" curve: my shares as-of each snapshot × NAV then; invest line = my
-  // cumulative net deposits as-of each snapshot. events come ASC by occurred_at.
-  $: mineValues = curve.map((pt) => {
-    let shares = 0;
-    for (const e of events) {
-      if (e.occurred_at <= pt.taken_at) shares += e.shares_delta;
-      else break;
-    }
-    return shares * pt.nav;
-  });
-  $: investValues = curve.map((pt) => {
-    let net = 0;
-    for (const e of events) {
-      if (e.occurred_at <= pt.taken_at) net += e.type === 'deposit' ? e.amount_usdt : -e.amount_usdt;
-      else break;
-    }
-    return net;
-  });
 
   $: rankedMembers = aggregate
     ? aggregate.friends.slice().sort((a, b) => b.value_usdt - a.value_usdt)
@@ -51,12 +30,11 @@
 
   async function load() {
     try {
-      [me, summary, aggregate, curve, events] = await Promise.all([
+      [me, summary, aggregate, curve] = await Promise.all([
         api.me(),
         api.mySummary(),
         api.aggregate(),
-        api.equityCurve(),
-        api.myEvents()
+        api.equityCurve()
       ]);
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
@@ -133,7 +111,7 @@
     </div>
 
     <!-- Equity curve -->
-    <EquityCurve points={curve} {mineValues} {investValues} height={220} />
+    <EquityCurve points={curve} height={220} />
 
     <!-- Current holdings -->
     {#if positionsAvailable}

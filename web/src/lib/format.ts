@@ -69,6 +69,30 @@ export function fmtRelativeTime(ms: number): string {
   return `${Math.floor(diff / 86400)} 天前`;
 }
 
+/**
+ * Removes isolated single-point spikes from a series. A point is a spike only
+ * if it deviates from BOTH neighbors by more than `relThresh` in the SAME
+ * direction (i.e. it pokes out and immediately reverts). Such points come from
+ * deposit-timing drift in the NAV snapshots — equity and share count briefly
+ * out of sync — not from real market moves (which persist into the next point,
+ * so the next-neighbor deviation stays small and the point isn't flagged).
+ * Spikes are replaced with the average of their neighbors.
+ */
+export function despike(values: number[], relThresh = 0.05): number[] {
+  if (values.length < 3) return values.slice();
+  const out = values.slice();
+  for (let i = 1; i < values.length - 1; i++) {
+    const a = values[i - 1], b = values[i], c = values[i + 1];
+    if (a <= 0 || c <= 0) continue;
+    const dPrev = (b - a) / a;
+    const dNext = (b - c) / c;
+    if (Math.abs(dPrev) > relThresh && Math.abs(dNext) > relThresh && Math.sign(dPrev) === Math.sign(dNext)) {
+      out[i] = (a + c) / 2;
+    }
+  }
+  return out;
+}
+
 export function pnlClass(n: number): string {
   if (Math.abs(n) < 1e-9) return 'text-ink-300';
   return n > 0 ? 'pos' : 'neg';
