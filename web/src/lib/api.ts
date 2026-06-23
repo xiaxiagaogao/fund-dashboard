@@ -111,6 +111,9 @@ export type StatsResponse = {
   by_symbol: SymbolPnL[];
 };
 
+export type IndexPoint = { t: number; close: number };
+export type IndexPrices = { qqq: IndexPoint[]; spy: IndexPoint[] };
+
 export type DayPnL = {
   date: string; // YYYY-MM-DD (China wall-clock)
   realized_pnl: number;
@@ -203,6 +206,14 @@ export const api = {
   },
 
   aggregate: () => req<Aggregate>('/api/aggregate'),
+
+  indexPrices: (fromMs?: number, toMs?: number) => {
+    const q = new URLSearchParams();
+    if (fromMs) q.set('from', String(fromMs));
+    if (toMs) q.set('to', String(toMs));
+    const qs = q.toString();
+    return req<IndexPrices>('/api/index-prices' + (qs ? '?' + qs : ''));
+  },
 
   openPositions: () => req<Position[]>('/api/positions/open'),
   closedPositions: (limit = 50) => req<Position[]>('/api/positions/closed?limit=' + limit),

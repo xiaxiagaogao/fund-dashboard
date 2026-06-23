@@ -92,6 +92,17 @@ func main() {
 		log.Println("WARNING: Binance keys not set — /api/admin/snapshot, /api/admin/cash-events, AND /api/positions/* will return 503")
 	}
 
+	// Index benchmark sync uses the PUBLIC klines endpoint (no signing), so it
+	// runs whether or not trading keys are set. Reuse srv.Binance if present,
+	// else a keyless client just for market data.
+	indexBN := srv.Binance
+	if indexBN == nil {
+		indexBN = binance.New("", "")
+	}
+	indexJob := &scheduler.IndexSyncJob{DB: db, BN: indexBN, Symbols: []string{"QQQUSDT", "SPYUSDT"}}
+	indexJob.Start(ctx, 24*time.Hour)
+	log.Println("index sync scheduler started (24h interval; QQQUSDT, SPYUSDT)")
+
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           srv.Routes(),

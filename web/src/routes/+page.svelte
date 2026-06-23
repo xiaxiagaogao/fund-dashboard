@@ -6,6 +6,7 @@
     type Summary,
     type Aggregate,
     type EquityPoint,
+    type IndexPrices,
     type Allocation,
     type Position
   } from '$lib/api';
@@ -18,6 +19,7 @@
   let summary: Summary | null = null;
   let aggregate: Aggregate | null = null;
   let curve: EquityPoint[] = [];
+  let index: IndexPrices = { qqq: [], spy: [] };
   let alloc: Allocation | null = null;
   let closedPositions: Position[] = [];
   let positionsAvailable = true;
@@ -30,11 +32,12 @@
 
   async function load() {
     try {
-      [me, summary, aggregate, curve] = await Promise.all([
+      [me, summary, aggregate, curve, index] = await Promise.all([
         api.me(),
         api.mySummary(),
         api.aggregate(),
-        api.equityCurve()
+        api.equityCurve(),
+        api.indexPrices().catch(() => ({ qqq: [], spy: [] }))
       ]);
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
@@ -110,8 +113,8 @@
       </div>
     </div>
 
-    <!-- Equity curve -->
-    <EquityCurve points={curve} height={220} />
+    <!-- Equity curve: fund vs 大盘 -->
+    <EquityCurve points={curve} qqq={index.qqq} spy={index.spy} height={220} />
 
     <!-- Current holdings -->
     {#if positionsAvailable}

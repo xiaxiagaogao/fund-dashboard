@@ -109,6 +109,17 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_fills_symbol_time ON binance_fills(symbol, fill_time)`,
 		`CREATE INDEX IF NOT EXISTS idx_fills_time ON binance_fills(fill_time DESC)`,
+		// Daily closes of tokenized index perps (QQQUSDT, SPYUSDT) used to
+		// benchmark the fund NAV against the market. Filled by the daily
+		// IndexSyncJob from the public klines endpoint. day_ms is the candle's
+		// open time (start of the UTC day).
+		`CREATE TABLE IF NOT EXISTS index_prices (
+			symbol     TEXT    NOT NULL,
+			day_ms     INTEGER NOT NULL,
+			close      REAL    NOT NULL,
+			fetched_at INTEGER NOT NULL,
+			PRIMARY KEY (symbol, day_ms)
+		)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {

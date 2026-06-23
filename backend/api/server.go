@@ -101,6 +101,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /api/me/events", s.auth(s.handleMyEvents))
 	mux.Handle("GET /api/me/export.csv", s.auth(s.handleMyExportCSV))
 	mux.Handle("GET /api/equity-curve", s.auth(s.handleEquityCurve))
+	mux.Handle("GET /api/index-prices", s.auth(s.handleIndexPrices))
 	mux.Handle("GET /api/aggregate", s.auth(s.handleAggregate))
 	mux.Handle("GET /api/positions/open", s.auth(s.handleOpenPositions))
 	mux.Handle("GET /api/positions/closed", s.auth(s.handleClosedPositions))

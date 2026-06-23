@@ -88,6 +88,38 @@ func (c *Client) signedGET(ctx context.Context, path string, params url.Values, 
 	return nil
 }
 
+// publicGET issues an unsigned GET against a public market-data endpoint
+// (klines etc.) — no timestamp, no signature, no API key required. Works even
+// when the client was constructed without keys.
+func (c *Client) publicGET(ctx context.Context, path string, params url.Values, out any) error {
+	endpoint := c.baseURL + path
+	if len(params) > 0 {
+		endpoint += "?" + params.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("binance %s %d: %s", path, resp.StatusCode, string(body))
+	}
+	if out != nil {
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("decode %s: %w (body=%s)", path, err, string(body))
+		}
+	}
+	return nil
+}
+
 // canonicalEncode produces a deterministic query string with sorted keys —
 // HMAC must hash the exact bytes that go on the wire.
 func canonicalEncode(v url.Values) string {
