@@ -7,7 +7,12 @@
 
   const R = 70;
   const C = 2 * Math.PI * R;
-  const TEAL = ['oklch(0.86 0.10 168)', 'oklch(0.78 0.115 172)', 'oklch(0.70 0.115 178)', 'oklch(0.62 0.105 186)'];
+  // 9-step teal→cyan ramp so the top 9 holdings each get a distinct shade.
+  const TEAL = [
+    'oklch(0.88 0.10 165)', 'oklch(0.83 0.115 169)', 'oklch(0.78 0.115 173)',
+    'oklch(0.73 0.115 177)', 'oklch(0.68 0.11 181)', 'oklch(0.63 0.11 185)',
+    'oklch(0.58 0.10 189)', 'oklch(0.53 0.10 193)', 'oklch(0.48 0.09 197)'
+  ];
   const SHORT = 'oklch(0.70 0.155 24)';
 
   type Slice = { label?: string; side?: string; pct: number; color: string; dash: string; offset: string };
@@ -30,14 +35,14 @@
       ])
     : [];
 
-  // Notional by symbol, tail beyond 6 grouped into 其他.
+  // Notional by symbol: show up to 10 individually; beyond that, top 9 + 其他.
   $: notionalItems = (() => {
     const ps = alloc?.positions ?? [];
     let ti = 0;
     const colorFor = (side: string) => (side === 'SHORT' ? SHORT : TEAL[ti++ % TEAL.length]);
-    if (ps.length <= 6) return ps.map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
-    const head = ps.slice(0, 5).map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
-    const tail = ps.slice(5);
+    if (ps.length <= 10) return ps.map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
+    const head = ps.slice(0, 9).map((p) => ({ label: p.symbol.replace('USDT', ''), side: p.side, pct: p.pct, color: colorFor(p.side) }));
+    const tail = ps.slice(9);
     return [...head, { label: `其他 ${tail.length}`, side: '', pct: tail.reduce((s, p) => s + p.pct, 0), color: 'oklch(0.40 0.012 240)' }];
   })();
   $: notional = donut(notionalItems);
