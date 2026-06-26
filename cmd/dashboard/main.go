@@ -99,9 +99,13 @@ func main() {
 	if indexBN == nil {
 		indexBN = binance.New("", "")
 	}
+	// Every 30 min (matching the NAV snapshot cadence): the current day's 1d
+	// candle is live, so frequent upserts keep today's benchmark point — and
+	// the "跑赢大盘" delta — current instead of up to a day stale. Past days are
+	// closed candles and stay fixed.
 	indexJob := &scheduler.IndexSyncJob{DB: db, BN: indexBN, Symbols: []string{"QQQUSDT", "SPYUSDT"}}
-	indexJob.Start(ctx, 24*time.Hour)
-	log.Println("index sync scheduler started (24h interval; QQQUSDT, SPYUSDT)")
+	indexJob.Start(ctx, 30*time.Minute)
+	log.Println("index sync scheduler started (30min interval; QQQUSDT, SPYUSDT)")
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

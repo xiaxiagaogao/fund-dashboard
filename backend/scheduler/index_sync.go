@@ -42,8 +42,9 @@ func (j *IndexSyncJob) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// Start runs an immediate sync then repeats every `interval` (daily) until ctx
-// is cancelled.
+// Start runs an immediate sync then repeats every `interval` until ctx is
+// cancelled. Run sub-daily so the in-progress day's candle (and the vs-market
+// delta) stays current; past days are closed candles that never change.
 func (j *IndexSyncJob) Start(ctx context.Context, interval time.Duration) {
 	go func() {
 		if err := j.RunOnce(ctx); err != nil {
