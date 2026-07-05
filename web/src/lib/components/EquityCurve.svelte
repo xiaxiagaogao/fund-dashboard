@@ -1,12 +1,18 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { fmtDate, fmtPct, despike } from '$lib/format';
   import type { EquityPoint, IndexPoint } from '$lib/api';
+  import { RANGES, type RangeKey } from '$lib/ranges';
 
   export let points: EquityPoint[] = [];
   export let qqq: IndexPoint[] = [];
   export let spy: IndexPoint[] = [];
   export let height = 220;
   export let glow = true;
+  export let range: RangeKey = '30d';
+  export let loading = false;
+
+  const dispatch = createEventDispatcher<{ range: RangeKey }>();
 
   const C_FUND = 'oklch(0.86 0.12 168)';
   const C_QQQ = 'oklch(0.70 0.11 250)';
@@ -78,7 +84,6 @@
   }
   $: dot = (ret: number[]) => ({ x: mapX(ts[ts.length - 1]), y: mapY(ret[ret.length - 1]) });
   $: xTicks = hasData ? [0, 0.33, 0.66, 1].map((f) => ts[Math.round(f * (ts.length - 1))]) : [];
-  $: days = hasData ? Math.round((t1 - t0) / 86400000) : 0;
 
   // Legend / outperformance reflect the hovered index, else the latest point.
   let hoverIdx: number | null = null;
@@ -104,8 +109,19 @@
 </script>
 
 <div class="card p-4 sm:p-5">
-  <div class="flex items-center justify-between gap-3 mb-2.5">
-    <div class="text-[13px] font-bold">收益对比 <span class="text-[11px] text-ink-500 font-normal ml-1">近 {days} 天 · vs 大盘</span></div>
+  <div class="flex items-center justify-between gap-2 mb-2.5 flex-wrap">
+    <div class="text-[13px] font-bold">收益对比 <span class="text-[11px] text-ink-500 font-normal ml-1">vs 大盘</span></div>
+    <div class="flex items-center gap-0.5 flex-none">
+      {#each RANGES as r}
+        <button
+          type="button"
+          class={'px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ' +
+            (r.key === range ? 'bg-accent-500/15 text-accent-400' : 'text-ink-500 hover:text-ink-300')}
+          aria-pressed={r.key === range}
+          disabled={r.key === range || loading}
+          on:click={() => dispatch('range', r.key)}>{r.label}</button>
+      {/each}
+    </div>
   </div>
 
   {#if !hasData}
@@ -119,7 +135,7 @@
       {#if spyRet}<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-1 rounded" style="background:{C_SPY}"></span><span class="text-ink-300">标普500</span> <span class={spyRet[idx] >= 0 ? 'pos' : 'neg'}>{fmtPct(spyRet[idx], 1)}</span></span>{/if}
     </div>
 
-    <svg viewBox={`0 0 ${W} ${H}`} class="w-full block overflow-visible" style="height:{H}px"
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full block overflow-visible transition-opacity" style="height:{H}px;opacity:{loading ? 0.45 : 1}"
       preserveAspectRatio="none" on:mousemove={onMove} on:mouseleave={() => (hoverIdx = null)} role="img" aria-label="收益对比">
       <defs>
         <filter id="eqGlow" x="-20%" y="-40%" width="140%" height="180%">

@@ -11,6 +11,7 @@
     type Position
   } from '$lib/api';
   import { fmtUSDT, fmtShares, fmtSignedUSDT, fmtSignedPct } from '$lib/format';
+  import { rangeFromMs, type RangeKey } from '$lib/ranges';
   import EquityCurve from '$lib/components/EquityCurve.svelte';
   import PositionDonuts from '$lib/components/PositionDonuts.svelte';
   import ClosedTrades from '$lib/components/ClosedTrades.svelte';
@@ -26,18 +27,48 @@
   let loading = true;
   let error = '';
 
+  // 收益对比 module range switcher (30天 / 3月 / 半年 / 1年 / 全部).
+  let range: RangeKey = '30d';
+  let curveLoading = false;
+
   $: rankedMembers = aggregate
     ? aggregate.friends.slice().sort((a, b) => b.value_usdt - a.value_usdt)
     : [];
 
+  // Fetch the curve + benchmark for a given window. Reused by initial load and
+  // by the range switcher. Keeps the previous series on screen until the new
+  // ones resolve (the caller toggles curveLoading to dim the chart meanwhile).
+  async function fetchWindow(r: RangeKey) {
+    const from = rangeFromMs(r);
+    const [c, ix] = await Promise.all([
+      api.equityCurve(from),
+      api.indexPrices(from).catch(() => ({ qqq: [], spy: [] }))
+    ]);
+    curve = c;
+    index = ix;
+  }
+
+  async function onRange(e: CustomEvent<RangeKey>) {
+    const r = e.detail;
+    if (r === range || curveLoading) return;
+    range = r;
+    curveLoading = true;
+    try {
+      await fetchWindow(r);
+    } finally {
+      curveLoading = false;
+    }
+  }
+
   async function load() {
     try {
+      const from = rangeFromMs(range);
       [me, summary, aggregate, curve, index] = await Promise.all([
         api.me(),
         api.mySummary(),
         api.aggregate(),
-        api.equityCurve(),
-        api.indexPrices().catch(() => ({ qqq: [], spy: [] }))
+        api.equityCurve(from),
+        api.indexPrices(from).catch(() => ({ qqq: [], spy: [] }))
       ]);
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
@@ -114,7 +145,7 @@
     </div>
 
     <!-- Equity curve: fund vs 大盘 -->
-    <EquityCurve points={curve} qqq={index.qqq} spy={index.spy} height={220} />
+    <EquityCurve points={curve} qqq={index.qqq} spy={index.spy} height={220} {range} loading={curveLoading} on:range={onRange} />
 
     <!-- Current holdings -->
     {#if positionsAvailable}
