@@ -108,7 +108,6 @@
   <div class="card p-6 text-loss-400">{error}</div>
 {:else if me && summary && aggregate}
   <div class="hidden md:block mb-6">
-    <div class="text-[11px] text-ink-500 tracking-[0.16em] uppercase mb-1.5">朋友视图 · 我的份额</div>
     <h1 class="text-[25px] font-extrabold tracking-tight m-0">我的看板</h1>
   </div>
 

@@ -30,9 +30,12 @@
     autocomplete="off"
   >
     <div class="flex flex-col items-center gap-3 pb-2">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600
-                  grid place-items-center text-ink-950 font-bold">F</div>
-      <h1 class="text-lg font-semibold tracking-tight">Fund Dashboard</h1>
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 grid place-items-center">
+        <svg viewBox="0 0 24 24" width="23" height="23" fill="var(--bg)" aria-hidden="true">
+          <path d="M1.5 20 L8.5 6.5 L12.5 15 L15.5 10.5 L22.5 20 Z" />
+        </svg>
+      </div>
+      <h1 class="text-lg font-semibold tracking-tight">XG fund</h1>
       <p class="text-xs text-ink-400">朋友资金托管账本</p>
     </div>
 

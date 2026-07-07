@@ -58,11 +58,12 @@
       <div class="flex items-center gap-3 px-1.5">
         <div class="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-none shadow-glow"
           style="background:linear-gradient(140deg,var(--pos),oklch(0.66 0.11 182))">
-          <div class="w-[11px] h-[11px] rounded-[3px]" style="background:var(--bg)"></div>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--bg)" aria-hidden="true">
+            <path d="M1.5 20 L8.5 6.5 L12.5 15 L15.5 10.5 L22.5 20 Z" />
+          </svg>
         </div>
         <div>
-          <div class="text-sm font-extrabold tracking-tight leading-none">朋友基金</div>
-          <div class="text-[10px] text-ink-500 tracking-[0.16em] uppercase mt-1 whitespace-nowrap">NAV · 单位法核算</div>
+          <div class="text-sm font-extrabold tracking-tight leading-none">XG fund</div>
         </div>
       </div>
 
@@ -102,9 +103,11 @@
       <div class="flex items-center gap-2.5">
         <div class="w-[26px] h-[26px] rounded-lg flex items-center justify-center flex-none"
           style="background:linear-gradient(140deg,var(--pos),oklch(0.66 0.11 182))">
-          <div class="w-[9px] h-[9px] rounded-[3px]" style="background:var(--bg)"></div>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="var(--bg)" aria-hidden="true">
+            <path d="M1.5 20 L8.5 6.5 L12.5 15 L15.5 10.5 L22.5 20 Z" />
+          </svg>
         </div>
-        <div class="text-sm font-extrabold tracking-tight">朋友基金</div>
+        <div class="text-sm font-extrabold tracking-tight">XG fund</div>
       </div>
       <button class="text-ink-400 hover:text-ink-100 text-xs" on:click={logout}>退出</button>
     </header>
