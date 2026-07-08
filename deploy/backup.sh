@@ -15,11 +15,19 @@
 #     copy in ./backups in case the VPS disk dies. Keeps last 30.
 set -euo pipefail
 
+# Connection details come from deploy/deploy.env (gitignored). Environment
+# variables still override, e.g. VPS_HOST=1.2.3.4 ./deploy/backup.sh.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/deploy.env" ]; then
+    # shellcheck disable=SC1091
+    source "$SCRIPT_DIR/deploy.env"
+fi
+
 cd "$(dirname "$0")/.."
 
 VPS_USER=${VPS_USER:-root}
-VPS_HOST=${VPS_HOST:-47.245.31.99}
-SSH_KEY=${SSH_KEY:-$HOME/Desktop/pem/tokyo-ali.pem}
+VPS_HOST=${VPS_HOST:?set VPS_HOST in deploy/deploy.env or the environment}
+SSH_KEY=${SSH_KEY:?set SSH_KEY in deploy/deploy.env or the environment}
 VPS_DB=${VPS_DB:-/root/stacks/dashboard/data/fund.db}
 
 mkdir -p backups

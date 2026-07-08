@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+# Real deployment target (host/IP, SSH key path, remote paths). Keep the
+# committed deploy/deploy.env.example as the template.
+deploy/deploy.env
 data/
 backups/
 dist/

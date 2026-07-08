@@ -1,7 +1,7 @@
 # Production stack for fund-dashboard.
 #
-# Co-tenants on the nofx VPS at 47.245.31.99. The contract preserved per
-# memory project_nofx_vps_cotenancy:
+# Co-tenant of nofx on the same VPS (host/IP live in deploy/deploy.env, not
+# here). The co-tenancy contract preserved per memory project_nofx_vps_cotenancy:
 #
 #   * cpus=0.5, mem_limit=512M   — dashboard cannot starve nofx
 #   * port :8090                  — separate from nofx :8080
@@ -30,11 +30,19 @@ services:
     container_name: fund-dashboard
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      # Bind to loopback ONLY. host nginx (:8443) reverse-proxies to
+      # 127.0.0.1:8090; the origin must never be reachable directly from the
+      # public internet (that would bypass Cloudflare's TLS/WAF and serve the
+      # API over plaintext). Docker's port publishing sidesteps ufw, so the
+      # 127.0.0.1 prefix — not a host firewall rule — is what actually closes it.
+      - "127.0.0.1:8090:8090"
     env_file:
       - .env
     environment:
       COOKIE_SECURE: "true"
+      # The only ingress is the host nginx above, which overwrites X-Real-IP
+      # with the real peer, so the app may trust that header for rate-limiting.
+      TRUST_PROXY_HEADERS: "true"
     volumes:
       - ./data:/app/data
     deploy:

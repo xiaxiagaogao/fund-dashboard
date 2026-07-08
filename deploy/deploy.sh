@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Deploy fund-dashboard to the nofx VPS.
+# Deploy fund-dashboard to its VPS (co-tenant of nofx).
+#
+# Connection details — SSH user/host, key path, remote paths, domain — come
+# from deploy/deploy.env (gitignored). Copy deploy/deploy.env.example and fill
+# it in. Nothing host-specific is hardcoded in this script.
 #
 # Usage (from project root):
 #
@@ -11,19 +15,29 @@
 #                                    # Snapshots the VPS DB and stops the container first.
 #
 # Assumptions:
-#   - SSH key at $HOME/Desktop/pem/tokyo-ali.pem reaches root@47.245.31.99
+#   - deploy/deploy.env present; SSH_KEY reaches $VPS_USER@$VPS_HOST
 #   - Local .env has Binance keys (gets copied to VPS as-is, then VPS .env
 #     gets JWT_SECRET overwritten with a fresh random value the first time)
-#   - Cloudflare DNS for fund.xg22.top → 47.245.31.99 already in place
+#   - Cloudflare DNS for $VPS_DOMAIN → $VPS_HOST already in place
 set -euo pipefail
 
-VPS_HOST="root@47.245.31.99"
-SSH_KEY="$HOME/Desktop/pem/tokyo-ali.pem"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ ! -f "$SCRIPT_DIR/deploy.env" ]; then
+    echo "missing $SCRIPT_DIR/deploy.env — copy deploy/deploy.env.example and fill it in" >&2
+    exit 1
+fi
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/deploy.env"
+: "${VPS_USER:?set VPS_USER in deploy.env}"
+: "${VPS_HOST:?set VPS_HOST in deploy.env}"
+: "${SSH_KEY:?set SSH_KEY in deploy.env}"
+: "${REMOTE_SRC:?set REMOTE_SRC in deploy.env}"
+: "${REMOTE_STACK:?set REMOTE_STACK in deploy.env}"
+: "${VPS_DOMAIN:=fund.example.com}"
+
+VPS_TARGET="$VPS_USER@$VPS_HOST"
 SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 RSYNC_SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
-
-REMOTE_SRC="/root/src/fund-dashboard"
-REMOTE_STACK="/root/stacks/dashboard"
 
 PUSH_DB=0
 BUILD_ONLY=0
@@ -51,12 +65,12 @@ cp -R web/build dist/web_build
 echo "    $(du -sh dist | cut -f1) of artifacts in ./dist"
 
 echo "==> 2/7  Probing VPS reachability"
-$SSH $VPS_HOST "echo ok && uname -m && docker --version" || { echo "VPS unreachable"; exit 1; }
+$SSH $VPS_TARGET "echo ok && uname -m && docker --version" || { echo "VPS unreachable"; exit 1; }
 
 echo "==> 3/7  Ensuring remote dirs exist"
-$SSH $VPS_HOST "mkdir -p $REMOTE_SRC $REMOTE_STACK/data $REMOTE_STACK/nginx"
+$SSH $VPS_TARGET "mkdir -p $REMOTE_SRC $REMOTE_STACK/data $REMOTE_STACK/nginx"
 
-echo "==> 4/7  Rsync source + dist artifacts (skip node_modules, .svelte-kit, build, data, backups, .env*)"
+echo "==> 4/7  Rsync source + dist artifacts (skip node_modules, .svelte-kit, build, data, backups, .env*, deploy.env)"
 rsync -az --delete \
     -e "$RSYNC_SSH" \
     --exclude='.git/' \
@@ -68,11 +82,12 @@ rsync -az --delete \
     --exclude='backups/' \
     --exclude='.env' \
     --exclude='.env.real' \
-    ./  $VPS_HOST:$REMOTE_SRC/
+    --exclude='deploy/deploy.env' \
+    ./  $VPS_TARGET:$REMOTE_SRC/
 
 echo "==> 5/7  Place / refresh stack files (docker-compose, nginx vhost, .env)"
 # docker-compose.yml + Dockerfile go into the stack dir alongside data/
-$SSH $VPS_HOST "cp -f $REMOTE_SRC/docker-compose.yml $REMOTE_STACK/docker-compose.yml \
+$SSH $VPS_TARGET "cp -f $REMOTE_SRC/docker-compose.yml $REMOTE_STACK/docker-compose.yml \
              && cp -f $REMOTE_SRC/Dockerfile.runtime $REMOTE_STACK/Dockerfile.runtime"
 
 # Create or refresh .env on VPS. On first deploy, generate a fresh
@@ -85,7 +100,7 @@ if [ -z "$LOCAL_BN_KEY" ] || [ -z "$LOCAL_BN_SECRET" ]; then
     echo "WARN: local .env missing BINANCE_API_KEY/SECRET — first deploy may need a manual fill on VPS." >&2
 fi
 
-$SSH $VPS_HOST "bash -s" <<EOF_REMOTE
+$SSH $VPS_TARGET "bash -s" <<EOF_REMOTE
 set -e
 ENV_PATH="$REMOTE_STACK/.env"
 if [ ! -f "\$ENV_PATH" ]; then
@@ -107,12 +122,12 @@ EOF_REMOTE
 
 # Sync the dashboard's source-of-truth source files into the stack so
 # `docker compose build` can use them.
-$SSH $VPS_HOST "cp -rf $REMOTE_SRC/* $REMOTE_STACK/ && rm -rf $REMOTE_STACK/deploy" || true
+$SSH $VPS_TARGET "cp -rf $REMOTE_SRC/* $REMOTE_STACK/ && rm -rf $REMOTE_STACK/deploy" || true
 
 if [ $PUSH_DB -eq 1 ]; then
     echo "==> 6/7  --push-db: about to OVERWRITE the live VPS ledger with the local copy"
     echo "    local : $(ls -l ./data/fund.db)"
-    echo "    remote: $($SSH $VPS_HOST "ls -l $REMOTE_STACK/data/fund.db 2>/dev/null || echo '(absent)'")"
+    echo "    remote: $($SSH $VPS_TARGET "ls -l $REMOTE_STACK/data/fund.db 2>/dev/null || echo '(absent)'")"
     read -r -p "    Type 'overwrite' to continue: " CONFIRM
     if [ "$CONFIRM" != "overwrite" ]; then
         echo "aborted — VPS fund.db untouched."
@@ -120,10 +135,10 @@ if [ $PUSH_DB -eq 1 ]; then
     fi
     # Snapshot the current VPS DB, stop the writer, then replace. Stale WAL/SHM
     # sidecars belong to the old DB and must not be replayed into the new one.
-    $SSH $VPS_HOST "/root/stacks/dashboard/backup-local.sh"
-    $SSH $VPS_HOST "cd $REMOTE_STACK && docker compose stop dashboard"
-    rsync -az -e "$RSYNC_SSH" ./data/fund.db $VPS_HOST:$REMOTE_STACK/data/fund.db
-    $SSH $VPS_HOST "rm -f $REMOTE_STACK/data/fund.db-wal $REMOTE_STACK/data/fund.db-shm"
+    $SSH $VPS_TARGET "$REMOTE_STACK/backup-local.sh"
+    $SSH $VPS_TARGET "cd $REMOTE_STACK && docker compose stop dashboard"
+    rsync -az -e "$RSYNC_SSH" ./data/fund.db $VPS_TARGET:$REMOTE_STACK/data/fund.db
+    $SSH $VPS_TARGET "rm -f $REMOTE_STACK/data/fund.db-wal $REMOTE_STACK/data/fund.db-shm"
     echo "    pushed; container restarts in step 6 (with --build-only it stays STOPPED)"
 else
     echo "==> 6/7  Leaving VPS fund.db untouched (default; --push-db to overwrite)"
@@ -131,31 +146,31 @@ fi
 
 if [ $BUILD_ONLY -eq 1 ]; then
     echo "==> 7/7  Build only — running 'docker compose build' on VPS"
-    $SSH $VPS_HOST "cd $REMOTE_STACK && docker compose build"
+    $SSH $VPS_TARGET "cd $REMOTE_STACK && docker compose build"
     exit 0
 fi
 
 echo "==> 7/7  Build + restart on VPS"
-$SSH $VPS_HOST "cd $REMOTE_STACK && docker compose up -d --build"
+$SSH $VPS_TARGET "cd $REMOTE_STACK && docker compose up -d --build"
 
 echo
 echo "==> Post-deploy probe"
-$SSH $VPS_HOST "sleep 3 && docker compose -f $REMOTE_STACK/docker-compose.yml ps && curl -sI http://127.0.0.1:8090/healthz | head -1"
+$SSH $VPS_TARGET "sleep 3 && docker compose -f $REMOTE_STACK/docker-compose.yml ps && curl -sI http://127.0.0.1:8090/healthz | head -1"
 
-cat <<'POST'
+cat <<POST
 
 Manual follow-ups:
 
   1. nginx vhost (one time, then cached):
-       scp -i $HOME/Desktop/pem/tokyo-ali.pem nginx/fund.xg22.top.conf root@47.245.31.99:/etc/nginx/conf.d/
-       ssh -i $HOME/Desktop/pem/tokyo-ali.pem root@47.245.31.99 'nginx -t && nginx -s reload'
+       scp -i $SSH_KEY nginx/${VPS_DOMAIN}.conf $VPS_TARGET:/etc/nginx/conf.d/
+       $SSH $VPS_TARGET 'nginx -t && nginx -s reload'
 
   2. Cloudflare DNS (one time):
-       Add A record  fund.xg22.top → 47.245.31.99  (Proxied = orange cloud)
+       Add A record  $VPS_DOMAIN → $VPS_HOST  (Proxied = orange cloud)
 
   3. Verify external:
-       curl -sI https://fund.xg22.top/healthz
+       curl -sI https://$VPS_DOMAIN/healthz
 
   4. Make sure nofx is still healthy:
-       ssh root@47.245.31.99 'docker logs nofx-trading --tail 5 && docker stats --no-stream'
+       $SSH $VPS_TARGET 'docker logs nofx-trading --tail 5 && docker stats --no-stream'
 POST

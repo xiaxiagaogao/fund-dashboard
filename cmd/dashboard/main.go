@@ -47,6 +47,10 @@ func main() {
 		DB:           db,
 		JWTSecret:    cfg.JWTSecret,
 		CookieSecure: os.Getenv("COOKIE_SECURE") != "false", // default true; set false for local http dev
+		// Trust X-Real-IP only when explicitly told we sit behind our own nginx
+		// (TRUST_PROXY_HEADERS=true in the prod .env). Default false so local dev
+		// and any accidental direct exposure fall back to the raw socket peer.
+		TrustProxyHeaders: os.Getenv("TRUST_PROXY_HEADERS") == "true",
 	}
 
 	// In production we ship the SvelteKit build alongside the binary. Auto-detect

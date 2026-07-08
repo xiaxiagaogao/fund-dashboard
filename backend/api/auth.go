@@ -13,15 +13,19 @@ import (
 	"github.com/xiagao/fund-dashboard/backend/store"
 )
 
-// clientIP extracts the real client IP. Deployment chain is
-// Cloudflare → host nginx → container, so prefer CF-Connecting-IP, then
-// nginx's X-Real-IP, then the raw socket peer.
-func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
-		return ip
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
+// clientIP extracts the client IP used to key the login rate limiter.
+//
+// Only X-Real-IP is trusted, and only when TrustProxyHeaders is set — i.e. the
+// sole ingress is our own nginx, which overwrites X-Real-IP with the socket peer
+// it actually saw, so a client cannot forge it. CF-Connecting-IP is deliberately
+// NOT trusted: nginx passes it through unchanged, so anyone reaching the origin
+// directly (bypassing Cloudflare) can spoof it. When headers aren't trusted, the
+// raw socket peer is the only honest source.
+func (s *Server) clientIP(r *http.Request) string {
+	if s.TrustProxyHeaders {
+		if ip := r.Header.Get("X-Real-IP"); ip != "" {
+			return ip
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -46,18 +50,25 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Brute-force guard: bcrypt makes each attempt slow, but friend-chosen
-	// passwords deserve a hard cap too. Keyed per username+IP so one friend
-	// fat-fingering their password can't lock everyone out.
-	limitKey := strings.ToLower(in.Username) + "|" + clientIP(r)
-	if !s.limiter().allow(limitKey) {
+	// passwords deserve a hard cap too. Two keys — a tight per-username+IP one
+	// (so one friend fat-fingering can't lock everyone out) and a looser
+	// per-username one that survives an attacker rotating IPs / forging headers.
+	uname := strings.ToLower(in.Username)
+	ipKey := "ip|" + uname + "|" + s.clientIP(r)
+	userKey := "user|" + uname
+	if !s.limiter().allow(ipKey, loginMaxFailures) || !s.limiter().allow(userKey, loginMaxFailuresPerUser) {
 		writeErr(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
 		return
+	}
+	recordFailure := func() {
+		s.limiter().fail(ipKey)
+		s.limiter().fail(userKey)
 	}
 	f, err := store.GetFriendByUsername(r.Context(), s.DB, in.Username)
 	if errors.Is(err, store.ErrFriendNotFound) {
 		// Constant-time-ish: still hash the password to avoid leaking timing.
 		bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidsaltinvalidsaltinvalidsaltinvalidsa"), []byte(in.Password))
-		s.limiter().fail(limitKey)
+		recordFailure()
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -66,11 +77,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(f.PasswordHash), []byte(in.Password)); err != nil {
-		s.limiter().fail(limitKey)
+		recordFailure()
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	s.limiter().reset(limitKey)
+	s.limiter().reset(ipKey)
+	s.limiter().reset(userKey)
 
 	tok, exp, err := middleware.IssueToken(s.JWTSecret, f.ID, f.Username, f.IsAdmin, middleware.PasswordVersion(f.PasswordHash))
 	if err != nil {

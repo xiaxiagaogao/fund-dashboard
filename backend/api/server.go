@@ -45,6 +45,12 @@ type Server struct {
 	CookieSecure bool   // true in prod (behind HTTPS), false for local dev
 	StaticDir    string // optional: directory holding the built SvelteKit SPA. When set, anything not /api/* or /healthz falls through to it.
 
+	// TrustProxyHeaders enables reading the client IP from the X-Real-IP header
+	// instead of the raw socket peer. Set true ONLY when the sole ingress is our
+	// own nginx (which overwrites X-Real-IP with the real peer it saw); false
+	// everywhere else, since forwarding headers are otherwise attacker-forgeable.
+	TrustProxyHeaders bool
+
 	// cashEventMu serializes the read-shares → compute → insert sequence in
 	// handleAdminCashEvent. SQLite's busy_timeout protects the writes, but the
 	// share math reads pool state first — two concurrent admin submissions
