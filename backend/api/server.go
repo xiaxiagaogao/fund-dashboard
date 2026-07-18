@@ -83,7 +83,9 @@ func (s *Server) validateSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c := middleware.FromContext(r.Context())
 		f, err := store.GetFriendByID(r.Context(), s.DB, c.FriendID)
-		if err != nil || middleware.PasswordVersion(f.PasswordHash) != c.Pwv {
+		// A deactivated friend (or a deleted one, or a stale password fingerprint)
+		// loses their live session on the very next request.
+		if err != nil || !f.Active || middleware.PasswordVersion(f.PasswordHash) != c.Pwv {
 			middleware.ClearSessionCookie(w, s.CookieSecure)
 			http.Error(w, "session expired", http.StatusUnauthorized)
 			return
@@ -118,6 +120,7 @@ func (s *Server) Routes() http.Handler {
 	// Admin only
 	mux.Handle("GET /api/admin/friends", s.admin(s.handleListFriends))
 	mux.Handle("POST /api/admin/friends", s.admin(s.handleCreateFriend))
+	mux.Handle("POST /api/admin/friends/{id}/active", s.admin(s.handleSetFriendActive))
 	mux.Handle("POST /api/admin/cash-events", s.admin(s.handleAdminCashEvent))
 	mux.Handle("GET /api/admin/cash-events", s.admin(s.handleAdminCashEvents))
 	mux.Handle("GET /api/admin/recent-fills", s.admin(s.handleAdminRecentFills))

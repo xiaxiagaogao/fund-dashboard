@@ -81,6 +81,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	// Deactivated account: correct password, but no session. Checked only after
+	// the password succeeds, and answered with a bare 403 (no reason), so the
+	// disabled state can't be probed by anyone who doesn't already hold the
+	// password.
+	if !f.Active {
+		writeErr(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	s.limiter().reset(ipKey)
 	s.limiter().reset(userKey)
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -72,10 +73,51 @@ func (s *Server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 	for _, f := range fs {
 		out = append(out, map[string]any{
 			"id": f.ID, "name": f.Name, "username": f.Username,
-			"is_admin": f.IsAdmin, "created_at": f.CreatedAt,
+			"is_admin": f.IsAdmin, "active": f.Active, "created_at": f.CreatedAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+type setActiveReq struct {
+	Active bool `json:"active"`
+}
+
+// POST /api/admin/friends/{id}/active — enable/disable a friend.
+//
+// Deactivating blocks login and drops the friend's live session on their next
+// request; their ledger and shares are left untouched. Admins can't deactivate
+// themselves, which would be an instant lockout.
+func (s *Server) handleSetFriendActive(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeErr(w, http.StatusBadRequest, "bad friend id")
+		return
+	}
+	var in setActiveReq
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	caller := middleware.FromContext(r.Context())
+	if !in.Active && caller.FriendID == id {
+		writeErr(w, http.StatusBadRequest, "cannot deactivate yourself")
+		return
+	}
+	if err := store.SetFriendActive(r.Context(), s.DB, id, in.Active); err != nil {
+		if errors.Is(err, store.ErrFriendNotFound) {
+			writeErr(w, http.StatusNotFound, "friend not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "update failed: "+err.Error())
+		return
+	}
+	action := "friend.activate"
+	if !in.Active {
+		action = "friend.deactivate"
+	}
+	store.WriteAudit(r.Context(), s.DB, caller.Username, action, map[string]any{"friend_id": id})
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "active": in.Active})
 }
 
 type createFriendReq struct {

@@ -126,6 +126,43 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("migrate stmt %q: %w", firstLine(s), err)
 		}
 	}
+	// Column additions to existing tables. CREATE TABLE IF NOT EXISTS above
+	// won't touch a table that already exists, so evolving columns go here,
+	// each guarded so re-running on a DB that already has the column is a no-op.
+	// active=1 default means every pre-existing friend stays enabled on upgrade.
+	if err := addColumnIfMissing(db, "friends", "active", "INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// addColumnIfMissing runs ALTER TABLE ADD COLUMN only when the column isn't
+// already present, so migrate() stays idempotent across restarts.
+func addColumnIfMissing(db *sql.DB, table, column, ddl string) error {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("table_info(%s): %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid, notNull, pk int
+			name, ctype      string
+			dfltValue        sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("scan table_info(%s): %w", table, err)
+		}
+		if name == column {
+			return rows.Close() // already present
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl)); err != nil {
+		return fmt.Errorf("add column %s.%s: %w", table, column, err)
+	}
 	return nil
 }
 

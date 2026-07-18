@@ -63,6 +63,7 @@ export type FriendRow = {
   name: string;
   username: string;
   is_admin: boolean;
+  active: boolean;
   created_at: number;
 };
 
@@ -227,6 +228,11 @@ export const api = {
     listFriends: () => req<FriendRow[]>('/api/admin/friends'),
     createFriend: (input: { name: string; username: string; password: string; is_admin: boolean }) =>
       req<{ id: number }>('/api/admin/friends', { method: 'POST', body: JSON.stringify(input) }),
+    setFriendActive: (id: number, active: boolean) =>
+      req<{ id: number; active: boolean }>('/api/admin/friends/' + id + '/active', {
+        method: 'POST',
+        body: JSON.stringify({ active })
+      }),
     listCashEvents: (limit = 200) =>
       req<Array<{
         id: number; friend_id: number; username: string; name: string;

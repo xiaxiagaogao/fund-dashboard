@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { api, type FriendRow, type RecentFill, ApiError } from '$lib/api';
+  import { api, type FriendRow, type RecentFill, type Me, ApiError } from '$lib/api';
   import { fmtUSDT, fmtSignedUSDT, fmtDate, fmtShares } from '$lib/format';
 
   type LedgerRow = {
@@ -14,6 +14,8 @@
   let friends: FriendRow[] = [];
   let fills: RecentFill[] = [];
   let ledger: LedgerRow[] = [];
+  let me: Me | null = null;
+  let togglingId: number | null = null;
   let loading = true;
   let error = '';
   let notice = '';
@@ -45,7 +47,7 @@
   async function load() {
     try {
       loadStep = '1/3 检查身份';
-      const me = await api.me();
+      me = await api.me();
       if (!me.is_admin) {
         loadStep = '非 admin，跳转';
         goto('/');
@@ -85,6 +87,21 @@
       notice = (err instanceof ApiError ? err.message : '创建失败');
     } finally {
       cfBusy = false;
+    }
+  }
+
+  // Enable/disable a member's access. Reversible; ledger & shares are untouched.
+  async function toggleActive(f: FriendRow) {
+    togglingId = f.id;
+    notice = '';
+    try {
+      await api.admin.setFriendActive(f.id, !f.active);
+      friends = await api.admin.listFriends();
+      notice = f.active ? `已停用 ${f.username}` : `已恢复 ${f.username}`;
+    } catch (err) {
+      notice = err instanceof ApiError ? err.message : '操作失败';
+    } finally {
+      togglingId = null;
     }
   }
 
@@ -226,6 +243,62 @@
         </label>
         <button class="btn-primary w-full" type="submit" disabled={cfBusy}>{cfBusy ? '创建中…' : '创建'}</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Members — enable/disable access. Deactivating blocks login and drops the
+       member's live session on their next request; shares & ledger are untouched. -->
+  <div class="card overflow-hidden mb-6">
+    <div class="px-5 py-4 border-b border-ink-800/80 flex items-baseline justify-between">
+      <div>
+        <div class="label">成员管理</div>
+        <div class="stat-sub text-ink-400 mt-1">停用即禁止登录并立即失效其会话 · 份额与流水不受影响 · 可随时恢复</div>
+      </div>
+      <div class="text-xs text-ink-500">共 {friends.length} 人</div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-ink-400 text-xs uppercase tracking-wider">
+          <tr>
+            <th class="text-left py-2.5 px-5 font-medium">成员</th>
+            <th class="text-left py-2.5 px-3 font-medium">用户名</th>
+            <th class="text-left py-2.5 px-3 font-medium">角色</th>
+            <th class="text-left py-2.5 px-3 font-medium">状态</th>
+            <th class="text-right py-2.5 px-5 font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each friends as f}
+            <tr class="table-row-hover border-t border-ink-800/60">
+              <td class="py-3 px-5 text-ink-50">{f.name}</td>
+              <td class="py-3 px-3 font-mono text-ink-300">{f.username}</td>
+              <td class="py-3 px-3 text-xs text-ink-400">{f.is_admin ? 'admin' : '成员'}</td>
+              <td class="py-3 px-3">
+                {#if f.active}
+                  <span class="pill-pos">启用</span>
+                {:else}
+                  <span class="pill-neg">已停用</span>
+                {/if}
+              </td>
+              <td class="py-3 px-5 text-right">
+                {#if me && f.id === me.id}
+                  <span class="text-xs text-ink-500">当前账号</span>
+                {:else}
+                  <button
+                    class={'btn-ghost ' + (f.active ? 'text-loss-400' : '')}
+                    on:click={() => toggleActive(f)}
+                    disabled={togglingId === f.id}
+                  >
+                    {togglingId === f.id ? '处理中…' : f.active ? '停用' : '恢复'}
+                  </button>
+                {/if}
+              </td>
+            </tr>
+          {:else}
+            <tr><td colspan="5" class="py-8 text-center text-ink-500 text-sm">还没有成员</td></tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
   </div>
 
