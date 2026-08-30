@@ -26,8 +26,15 @@ type View struct {
 	EntryTime        int64   `json:"entry_time"`
 	ExitPrice        float64 `json:"exit_price,omitempty"`
 	ExitTime         int64   `json:"exit_time,omitempty"`
-	RealizedPnL      float64 `json:"realized_pnl"`
-	UnrealizedPnL    float64 `json:"unrealized_pnl,omitempty"` // only meaningful for OPEN
+	// RealizedPnL is gross of fees, exactly as Binance books it. For an OPEN
+	// position it is the PnL already banked by partial closes (not zero — that
+	// money is real and was previously invisible in every panel).
+	RealizedPnL float64 `json:"realized_pnl"`
+	// Commission is the fee paid across this position's fills. RealizedPnL minus
+	// Commission is what actually reached the balance; showing gross alone
+	// overstated results materially (fees ran ~40% of gross realized PnL).
+	Commission    float64 `json:"commission"`
+	UnrealizedPnL float64 `json:"unrealized_pnl,omitempty"` // only meaningful for OPEN
 	MarkPrice        float64 `json:"mark_price,omitempty"`     // only meaningful for OPEN
 	LiquidationPrice float64 `json:"liquidation_price,omitempty"`
 	Leverage         int     `json:"leverage,omitempty"`
@@ -43,7 +50,7 @@ type View struct {
 type Orchestrator struct {
 	BN       *binance.Client
 	FundDB   *sql.DB
-	Lookback time.Duration // how far back to look for closed positions; default 90d
+	Lookback time.Duration // how far back to read fills; 0 (default) = full history
 	CacheTTL time.Duration // default 60s
 
 	mu     sync.Mutex // guards cached
@@ -221,11 +228,20 @@ func (o *Orchestrator) cacheTTL() time.Duration {
 	return 60 * time.Second
 }
 
+// lookback is how far back to read fills. Default 0 = the whole history.
+//
+// This MUST default to "everything": the reconstruction walks each position
+// from birth, so starting mid-life silently corrupts it — entry legs are cut
+// (wrong size and average price), still-open positions get reported as
+// completed round trips, and the realized PnL of the missing legs disappears.
+// A 90-day window did exactly that here, showing +34 USDT of "closed profit"
+// on an account that had actually realized -8. The fill history is small
+// (hundreds of rows), so reading all of it is cheap; trim for display instead.
 func (o *Orchestrator) lookback() time.Duration {
 	if o.Lookback > 0 {
 		return o.Lookback
 	}
-	return 90 * 24 * time.Hour
+	return 0
 }
 
 func (o *Orchestrator) refreshNow(ctx context.Context) ([]View, []View, error) {
@@ -236,7 +252,11 @@ func (o *Orchestrator) refreshNow(ctx context.Context) ([]View, []View, error) {
 	}
 
 	// 2) Read fills from fund.db. This is the dashboard's own canonical record.
-	sinceMs := time.Now().Add(-o.lookback()).UnixMilli()
+	// lookback()==0 means the full history, which is the default — see lookback.
+	var sinceMs int64
+	if lb := o.lookback(); lb > 0 {
+		sinceMs = time.Now().Add(-lb).UnixMilli()
+	}
 	fills, err := store.ListFillsSince(ctx, o.FundDB, sinceMs)
 	if err != nil {
 		return nil, nil, err
@@ -244,12 +264,33 @@ func (o *Orchestrator) refreshNow(ctx context.Context) ([]View, []View, error) {
 	trades := fillsToUserTrades(fills)
 	closedCycles, openResidualsFromFills := Derive(trades)
 
-	// 3) Build OPEN views from positionRisk; recover entry_time from fills.
-	openByKey := map[string]Lifecycle{}
-	for _, l := range openResidualsFromFills {
-		openByKey[l.Symbol+"|"+l.DirectionalSide] = l
+	// 3) Build OPEN views from positionRisk; recover entry_time + already-banked
+	//    realized PnL from the reconstructed fill history.
+	openViews := buildOpenViews(risks, openResidualsFromFills)
+
+	// 4) Build CLOSED views from reconstructed lifecycles.
+	closedViews := buildClosedViews(closedCycles)
+
+	sort.Slice(closedViews, func(i, j int) bool { return closedViews[i].ExitTime > closedViews[j].ExitTime })
+	sort.Slice(openViews, func(i, j int) bool { return openViews[i].EntryTime > openViews[j].EntryTime })
+	return openViews, closedViews, nil
+}
+
+// buildOpenViews merges live positionRisk (authoritative for size, mark and
+// unrealized PnL) with the reconstructed fill history (authoritative for when
+// the position was opened and what it has already banked).
+//
+// Carrying RealizedPnL/Commission over from the residual is what makes the
+// numbers reconcile: a position that has been partially closed has really
+// booked that money, and reporting it only as "unrealized" hid it entirely.
+// With this, sum(closed realized) + sum(open realized) == the account's total
+// realized PnL.
+func buildOpenViews(risks []binance.PositionRisk, residuals []Lifecycle) []View {
+	byKey := make(map[string]Lifecycle, len(residuals))
+	for _, l := range residuals {
+		byKey[l.Symbol+"|"+l.DirectionalSide] = l
 	}
-	openViews := make([]View, 0, len(risks))
+	out := make([]View, 0, len(risks))
 	for _, r := range risks {
 		side := "LONG"
 		if r.PositionAmt < 0 {
@@ -271,18 +312,23 @@ func (o *Orchestrator) refreshNow(ctx context.Context) ([]View, []View, error) {
 			Leverage:         r.Leverage,
 			Status:           "OPEN",
 		}
-		if matched, ok := openByKey[r.Symbol+"|"+side]; ok {
+		if matched, ok := byKey[r.Symbol+"|"+side]; ok {
 			v.EntryTime = matched.EntryTime
+			v.RealizedPnL = matched.RealizedPnL
+			v.Commission = matched.Commission
 		} else {
 			v.EntryTime = r.UpdateTime
 		}
-		openViews = append(openViews, v)
+		out = append(out, v)
 	}
+	return out
+}
 
-	// 4) Build CLOSED views from reconstructed lifecycles.
-	closedViews := make([]View, 0, len(closedCycles))
-	for _, l := range closedCycles {
-		closedViews = append(closedViews, View{
+// buildClosedViews renders completed round trips for the API.
+func buildClosedViews(cycles []Lifecycle) []View {
+	out := make([]View, 0, len(cycles))
+	for _, l := range cycles {
+		out = append(out, View{
 			Symbol:      l.Symbol,
 			Side:        l.DirectionalSide,
 			Quantity:    l.EntryQuantity,
@@ -291,13 +337,11 @@ func (o *Orchestrator) refreshNow(ctx context.Context) ([]View, []View, error) {
 			ExitPrice:   l.ExitPrice,
 			ExitTime:    l.ExitTime,
 			RealizedPnL: l.RealizedPnL,
+			Commission:  l.Commission,
 			Status:      "CLOSED",
 		})
 	}
-
-	sort.Slice(closedViews, func(i, j int) bool { return closedViews[i].ExitTime > closedViews[j].ExitTime })
-	sort.Slice(openViews, func(i, j int) bool { return openViews[i].EntryTime > openViews[j].EntryTime })
-	return openViews, closedViews, nil
+	return out
 }
 
 // fillsToUserTrades adapts the persisted-fill rows back into the in-memory
@@ -347,13 +391,17 @@ func ComputeStats(closed []View) Stats {
 	var winSum, lossSum float64
 	var holds []float64
 	for _, p := range closed {
-		s.TotalPnL += p.RealizedPnL
-		if p.RealizedPnL > 0 {
+		// Net of fees — that is what reached the balance. On gross, a trade that
+		// earned less than its commission counted as a win and inflated both the
+		// win rate and the total.
+		pnl := p.RealizedPnL - p.Commission
+		s.TotalPnL += pnl
+		if pnl > 0 {
 			s.Wins++
-			winSum += p.RealizedPnL
-		} else if p.RealizedPnL < 0 {
+			winSum += pnl
+		} else if pnl < 0 {
 			s.Losses++
-			lossSum += p.RealizedPnL
+			lossSum += pnl
 		}
 		if p.ExitTime > p.EntryTime {
 			holds = append(holds, float64(p.ExitTime-p.EntryTime)/3_600_000)
@@ -403,8 +451,9 @@ func AggregateBySymbol(closed []View) []SymbolPnL {
 			by[p.Symbol] = s
 		}
 		s.Trades++
-		s.TotalPnL += p.RealizedPnL
-		if p.RealizedPnL > 0 {
+		pnl := p.RealizedPnL - p.Commission // net, matching ComputeStats
+		s.TotalPnL += pnl
+		if pnl > 0 {
 			s.Wins++
 		}
 	}

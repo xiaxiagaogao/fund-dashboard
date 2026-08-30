@@ -12,6 +12,13 @@
 
   $: notional = positions.reduce((s, p) => s + Math.abs((p.mark_price ?? p.entry_price) * p.quantity), 0);
   $: totalUnrealized = positions.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0);
+  // Money these positions have ALREADY banked via partial closes, net of fees.
+  // It is not floating PnL and was previously invisible everywhere.
+  $: totalRealized = positions.reduce(
+    (s, p) => s + (p.realized_pnl ?? 0) - (p.commission ?? 0),
+    0
+  );
+  $: hasRealized = positions.some((p) => p.realized_pnl || p.commission);
 
   function fmtPx(v: number): string {
     const dp = v < 10 ? 4 : v < 1000 ? 2 : 1;
@@ -27,6 +34,11 @@
       <div class={'font-mono text-[11px] mt-0.5 ' + (totalUnrealized > 0 ? 'pos' : totalUnrealized < 0 ? 'neg' : 'text-ink-300')}>
         浮动 {fmtSignedUSDT(totalUnrealized, 2)}
       </div>
+      {#if hasRealized}
+        <div class={'font-mono text-[11px] mt-0.5 ' + (totalRealized > 0 ? 'pos' : totalRealized < 0 ? 'neg' : 'text-ink-300')}>
+          已实现 {fmtSignedUSDT(totalRealized, 2)}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -55,7 +67,13 @@
             <div class={'font-mono text-[13px] font-semibold ' + ((p.unrealized_pnl ?? 0) >= 0 ? 'pos' : 'neg')}>
               {p.unrealized_pnl !== undefined ? fmtSignedUSDT(p.unrealized_pnl, 2) : '—'}
             </div>
-            <div class={'text-[10px] font-mono mt-1 ' + (effectivePct >= 0 ? 'pos' : 'neg')}>{fmtSignedPct(effectivePct)}</div>
+            <div class="text-[10px] font-mono mt-1 whitespace-nowrap">
+              <span class={effectivePct >= 0 ? 'pos' : 'neg'}>{fmtSignedPct(effectivePct)}</span>
+              {#if p.realized_pnl || p.commission}
+                {@const banked = (p.realized_pnl ?? 0) - (p.commission ?? 0)}
+                <span class="text-ink-500"> · 已实现 </span><span class={banked >= 0 ? 'pos' : 'neg'}>{fmtSignedUSDT(banked, 2)}</span>
+              {/if}
+            </div>
           </div>
         </div>
       {/each}

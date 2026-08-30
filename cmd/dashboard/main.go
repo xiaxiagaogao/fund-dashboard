@@ -86,9 +86,11 @@ func main() {
 		// Positions orchestrator reads OPEN live from Binance, CLOSED from
 		// fund.db's binance_fills. No nofx coupling.
 		srv.Positions = &positions.Orchestrator{
-			BN:       srv.Binance,
-			FundDB:   db,
-			Lookback: 90 * 24 * time.Hour,
+			BN:     srv.Binance,
+			FundDB: db,
+			// Lookback intentionally unset (0 = full history): position
+			// reconstruction has to walk each position from birth, so a window
+			// silently corrupts sizes, entry prices and realized PnL.
 			CacheTTL: 60 * time.Second,
 		}
 		log.Println("positions orchestrator wired (Binance OPEN + fund.db CLOSED)")

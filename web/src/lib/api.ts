@@ -75,7 +75,13 @@ export type Position = {
   entry_time: number;
   exit_price?: number;
   exit_time?: number;
+  /**
+   * Gross realized PnL as Binance books it. For an OPEN position this is the
+   * PnL already banked by partial closes — not zero.
+   */
   realized_pnl: number;
+  /** Fees paid across this position's fills. Net = realized_pnl - commission. */
+  commission: number;
   /** Only meaningful for OPEN positions (live mark-to-market). */
   unrealized_pnl?: number;
   /** Only meaningful for OPEN positions. */

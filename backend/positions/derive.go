@@ -72,7 +72,18 @@ func Derive(trades []binance.UserTrade) (closed, open []Lifecycle) {
 	}
 
 	for _, fills := range grouped {
-		sort.Slice(fills, func(i, j int) bool { return fills[i].Time < fills[j].Time })
+		// Order by execution, not just by millisecond. Binance stamps several
+		// fills of one order with the same Time, and an unstable sort on Time
+		// alone let those ties land in arbitrary order — which changes where the
+		// walk sees the position cross zero, and therefore the round-trip count.
+		// Trade IDs are monotonic per symbol in execution order, so they are the
+		// authoritative tiebreak.
+		sort.SliceStable(fills, func(i, j int) bool {
+			if fills[i].Time != fills[j].Time {
+				return fills[i].Time < fills[j].Time
+			}
+			return fills[i].ID < fills[j].ID
+		})
 
 		var (
 			running       float64 // signed net qty
