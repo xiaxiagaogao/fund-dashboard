@@ -1,117 +1,197 @@
 <script lang="ts">
-  import type { DayPnL } from '$lib/api';
-  import { fmtSignedUSDT } from '$lib/format';
-
+  import { ChevronLeft, ChevronRight } from "lucide-svelte";
+  import type { DayPnL } from "$lib/api";
+  import { fmtSignedUSDT, fmtUSDT, pnlClass } from "$lib/format";
   export let days: DayPnL[] = [];
-
-  type Cell = { date: string; net: number; fills: number; has: boolean } | null;
-
-  // Build Monday-started week columns spanning the first trade day → today.
-  $: weeks = (() => {
-    if (days.length === 0) return [] as Cell[][];
-    const byDate = new Map(days.map((d) => [d.date, d]));
-    const first = new Date(days[0].date + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Back up to Monday (getDay: 0=Sun..6=Sat → Monday offset).
-    const start = new Date(first);
-    const dow = (start.getDay() + 6) % 7; // 0=Mon
-    start.setDate(start.getDate() - dow);
-
-    const cols: Cell[][] = [];
-    let col: Cell[] = [];
-    const cur = new Date(start);
-    while (cur <= today) {
-      const y = cur.getFullYear();
-      const m = String(cur.getMonth() + 1).padStart(2, '0');
-      const d = String(cur.getDate()).padStart(2, '0');
-      const key = `${y}-${m}-${d}`;
-      const rec = byDate.get(key);
-      const beforeFirst = cur < first;
-      col.push(beforeFirst ? null : rec ? { date: key, net: rec.net, fills: rec.fills, has: true } : { date: key, net: 0, fills: 0, has: false });
-      if (col.length === 7) {
-        cols.push(col);
-        col = [];
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
-    if (col.length) {
-      while (col.length < 7) col.push(null);
-      cols.push(col);
-    }
-    return cols;
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  let selectedMonth = today.slice(0, 7);
+  let selectedDay = today;
+  $: byDate = new Map(days.map((d) => [d.date, d]));
+  $: earliest = days.length
+    ? [...days].sort((a, b) => a.date.localeCompare(b.date))[0].date.slice(0, 7)
+    : today.slice(0, 7);
+  $: monthsDays = days.filter((d) => d.date.startsWith(selectedMonth));
+  $: monthNet = monthsDays.reduce((s, d) => s + d.net, 0);
+  $: selected = byDate.get(selectedDay);
+  $: cells = (() => {
+    const [year, month] = selectedMonth.split("-").map(Number);
+    const offset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+    const count = new Date(year, month, 0).getDate();
+    return Array.from({ length: 42 }, (_, i) => {
+      const n = i - offset + 1;
+      return n >= 1 && n <= count
+        ? { n, key: `${selectedMonth}-${String(n).padStart(2, "0")}` }
+        : null;
+    });
   })();
-
-  $: maxAbs = Math.max(1e-9, ...days.map((d) => Math.abs(d.net)));
-
-  function cellStyle(c: Cell): string {
-    if (!c) return 'background:transparent';
-    if (!c.has) return 'background:oklch(0.245 0.008 240)'; // in-range, no trades
-    if (Math.abs(c.net) < 1e-9) return 'background:oklch(0.30 0.008 240)';
-    const k = Math.min(1, Math.abs(c.net) / maxAbs);
-    return c.net > 0
-      ? `background:oklch(${(0.50 + 0.30 * k).toFixed(3)} ${(0.09 + 0.045 * k).toFixed(3)} 168)`
-      : `background:oklch(${(0.48 + 0.18 * k).toFixed(3)} ${(0.10 + 0.05 * k).toFixed(3)} 24)`;
+  function moveMonth(amount: number) {
+    const [y, m] = selectedMonth.split("-").map(Number);
+    const date = new Date(y, m - 1 + amount, 1);
+    selectedMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    selectedDay =
+      days
+        .filter((d) => d.date.startsWith(selectedMonth))
+        .map((d) => d.date)
+        .sort()
+        .at(-1) ?? `${selectedMonth}-01`;
   }
-  function cellTitle(c: Cell): string {
-    if (!c || !c.has) return c ? `${c.date} · 无交易` : '';
-    return `${c.date} · ${fmtSignedUSDT(c.net, 2)} USDT · ${c.fills} 笔`;
+  function shortAmount(value: number) {
+    return Math.abs(value) >= 1000
+      ? `${value >= 0 ? "+" : "−"}${(Math.abs(value) / 1000).toFixed(1)}k`
+      : fmtSignedUSDT(value, 0);
   }
-
-  // Month label per column (show when the column's first real day starts a new month).
-  $: monthLabels = weeks.map((col) => {
-    const firstReal = col.find((c) => c !== null);
-    if (!firstReal) return '';
-    const d = new Date(firstReal.date + 'T00:00:00');
-    return d.getDate() <= 7 ? `${d.getMonth() + 1}月` : '';
-  });
-
-  const WD = ['一', '', '三', '', '五', '', '日'];
-
-  $: tradedDays = days.filter((d) => d.fills > 0).length;
-  $: greenDays = days.filter((d) => d.net > 0).length;
-  $: totalNet = days.reduce((s, d) => s + d.net, 0);
 </script>
 
-<div class="card p-5">
-  <div class="flex items-start justify-between gap-4 mb-4">
-    <div>
-      <div class="label">每日盈亏日历</div>
-      <div class="stat-sub text-ink-400 mt-1">{tradedDays} 个交易日 · {greenDays} 绿 · 净 {fmtSignedUSDT(totalNet, 0)} USDT</div>
-    </div>
-    <div class="flex items-center gap-1.5 text-[11px] text-ink-500">
-      <span>亏</span>
-      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.62 0.16 24)"></span>
-      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.245 0.008 240)"></span>
-      <span class="w-3 h-3 rounded-[3px]" style="background:oklch(0.74 0.12 168)"></span>
-      <span>盈</span>
+<section class="section" aria-label="每日盈亏日历">
+  <div class="section-head">
+    <h2>每日盈亏</h2>
+    <div class="month-navigation">
+      <button
+        class="icon-button"
+        aria-label="上个月"
+        disabled={selectedMonth <= earliest}
+        on:click={() => moveMonth(-1)}><ChevronLeft size={15} /></button
+      ><span class="number">{selectedMonth.replace("-", " / ")}</span><button
+        class="icon-button"
+        aria-label="下个月"
+        disabled={selectedMonth >= today.slice(0, 7)}
+        on:click={() => moveMonth(1)}><ChevronRight size={15} /></button
+      >
     </div>
   </div>
-
-  {#if weeks.length === 0}
-    <div class="py-8 text-center text-ink-500 text-sm">还没有成交记录</div>
-  {:else}
-    <div class="overflow-x-auto">
-      <div class="inline-flex gap-[3px] pb-1 ml-7 mb-1">
-        {#each monthLabels as ml}
-          <div class="w-3 text-[10px] text-ink-500">{ml}</div>
-        {/each}
-      </div>
-      <div class="flex gap-2">
-        <div class="flex flex-col gap-[3px] text-[10px] text-ink-500 pr-1">
-          {#each WD as w}<div class="h-3 leading-3">{w}</div>{/each}
-        </div>
-        <div class="inline-flex gap-[3px]">
-          {#each weeks as col}
-            <div class="flex flex-col gap-[3px]">
-              {#each col as cell}
-                <div class="w-3 h-3 rounded-[3px]" style={cellStyle(cell)} title={cellTitle(cell)}></div>
-              {/each}
-            </div>
-          {/each}
-        </div>
-      </div>
+  <div class="calendar-summary">
+    <span class={"number " + pnlClass(monthNet)}>{fmtSignedUSDT(monthNet)}</span
+    ><span
+      >USDT <span class="ml-2"
+        >{monthsDays.filter((d) => d.fills > 0).length} 个交易日</span
+      ></span
+    >
+  </div>
+  <div class="calendar-grid">
+    <div class="weekdays">
+      {#each ["一", "二", "三", "四", "五", "六", "日"] as weekday}<span
+          >{weekday}</span
+        >{/each}
     </div>
-  {/if}
-</div>
+    <div class="calendar-cells">
+      {#each cells as cell}{#if cell}{@const record = byDate.get(
+            cell.key,
+          )}<button
+            class="day-cell"
+            class:positive={record && record.net > 0}
+            class:negative={record && record.net < 0}
+            class:selected={selectedDay === cell.key}
+            disabled={cell.key > today}
+            aria-pressed={selectedDay === cell.key}
+            aria-label={`${cell.key}，${record ? `净收益 ${fmtSignedUSDT(record.net)} USDT，${record.fills} 笔成交` : "无成交记录"}`}
+            on:click={() => (selectedDay = cell.key)}
+            ><span class="day-number">{cell.n}</span><span
+              class="day-pnl number"
+              >{record ? shortAmount(record.net) : "—"}</span
+            ></button
+          >{:else}<div class="day-placeholder"></div>{/if}{/each}
+    </div>
+  </div>
+  <div class="calendar-detail" aria-live="polite">
+    <span class="number">{selectedDay}</span>{#if selected}<span
+        >净 <span class={"number " + pnlClass(selected.net)}
+          >{fmtSignedUSDT(selected.net)}</span
+        >
+        · 费 <span class="number">{fmtUSDT(selected.commission)}</span> · {selected.fills}
+        笔</span
+      >{:else}<span>无成交记录</span>{/if}
+  </div>
+</section>
+
+<style>
+  .month-navigation {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .month-navigation :global(.icon-button) {
+    width: 27px;
+    height: 30px;
+  }
+  .calendar-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin: 0 0 20px;
+  }
+  .calendar-summary > .number {
+    font-size: 20px;
+  }
+  .calendar-summary > span:last-child {
+    font-size: 10px;
+    color: var(--lo);
+  }
+  .weekdays,
+  .calendar-cells {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .weekdays {
+    margin-bottom: 8px;
+    text-align: center;
+    color: var(--lo);
+    font-size: 10px;
+  }
+  .day-cell,
+  .day-placeholder {
+    height: 39px;
+    min-width: 0;
+  }
+  .day-cell {
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 3px;
+  }
+  .day-cell.positive {
+    background: #afd4bf0f;
+    color: var(--pos);
+  }
+  .day-cell.negative {
+    background: #e58d8912;
+    color: var(--neg);
+  }
+  .day-cell.selected {
+    border-color: var(--mid);
+  }
+  .day-cell:hover:not(:disabled) {
+    border-color: var(--lo);
+  }
+  .day-cell:disabled {
+    opacity: 0.3;
+  }
+  .day-number {
+    color: var(--lo);
+    font-size: 10px;
+  }
+  .day-pnl {
+    font-size: 9px;
+  }
+  .calendar-detail {
+    min-height: 43px;
+    padding-top: 13px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+    align-content: start;
+    font-size: 10px;
+    color: var(--lo);
+  }
+</style>

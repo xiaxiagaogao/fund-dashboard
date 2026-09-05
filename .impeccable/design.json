@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-05T06:50:11Z",
+  "title": "Design System: XG fund",
+  "extensions": {
+    "colorMeta": {
+      "graphite-bg": {
+        "role": "neutral",
+        "displayName": "Graphite Background",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "graphite-panel": {
+        "role": "neutral",
+        "displayName": "Graphite Panel",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "graphite-raised": {
+        "role": "neutral",
+        "displayName": "Graphite Raised",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "graphite-line": {
+        "role": "neutral",
+        "displayName": "Graphite Line",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "graphite-control": {
+        "role": "neutral",
+        "displayName": "Graphite Control",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Primary Text",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Text",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "text-mid": {
+        "role": "neutral",
+        "displayName": "Mid Text",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "text-quiet": {
+        "role": "neutral",
+        "displayName": "Quiet Text",
+        "tonalRamp": [
+          "#111314",
+          "#181b1d",
+          "#222629",
+          "#353b3e",
+          "#535c61",
+          "#9aa5aa",
+          "#c9d0d2",
+          "#f5f7f7"
+        ]
+      },
+      "mineral-green": {
+        "role": "primary",
+        "displayName": "Mineral Green",
+        "tonalRamp": [
+          "oklch(15% 0.0488 160.28)",
+          "oklch(26% 0.0488 160.28)",
+          "oklch(38% 0.0488 160.28)",
+          "oklch(49% 0.0488 160.28)",
+          "oklch(61% 0.0488 160.28)",
+          "oklch(72% 0.0488 160.28)",
+          "oklch(84% 0.0488 160.28)",
+          "oklch(95% 0.0488 160.28)"
+        ]
+      },
+      "mineral-green-bright": {
+        "role": "primary",
+        "displayName": "Bright Mineral Green",
+        "tonalRamp": [
+          "oklch(15% 0.0359 159.60)",
+          "oklch(26% 0.0359 159.60)",
+          "oklch(38% 0.0359 159.60)",
+          "oklch(49% 0.0359 159.60)",
+          "oklch(61% 0.0359 159.60)",
+          "oklch(72% 0.0359 159.60)",
+          "oklch(84% 0.0359 159.60)",
+          "oklch(95% 0.0359 159.60)"
+        ]
+      },
+      "mineral-green-tint": {
+        "role": "primary",
+        "displayName": "Mineral Green Tint",
+        "tonalRamp": [
+          "oklch(15% 0.0488 160.28 / 0.0784)",
+          "oklch(26% 0.0488 160.28 / 0.0784)",
+          "oklch(38% 0.0488 160.28 / 0.0784)",
+          "oklch(49% 0.0488 160.28 / 0.0784)",
+          "oklch(61% 0.0488 160.28 / 0.0784)",
+          "oklch(72% 0.0488 160.28 / 0.0784)",
+          "oklch(84% 0.0488 160.28 / 0.0784)",
+          "oklch(95% 0.0488 160.28 / 0.0784)"
+        ]
+      },
+      "soft-red": {
+        "role": "tertiary",
+        "displayName": "Soft Red",
+        "tonalRamp": [
+          "oklch(15% 0.1080 22.83)",
+          "oklch(26% 0.1080 22.83)",
+          "oklch(38% 0.1080 22.83)",
+          "oklch(49% 0.1080 22.83)",
+          "oklch(61% 0.1080 22.83)",
+          "oklch(72% 0.1080 22.83)",
+          "oklch(84% 0.1080 22.83)",
+          "oklch(95% 0.1080 22.83)"
+        ]
+      },
+      "soft-red-bright": {
+        "role": "tertiary",
+        "displayName": "Bright Soft Red",
+        "tonalRamp": [
+          "oklch(15% 0.0822 23.71)",
+          "oklch(26% 0.0822 23.71)",
+          "oklch(38% 0.0822 23.71)",
+          "oklch(49% 0.0822 23.71)",
+          "oklch(61% 0.0822 23.71)",
+          "oklch(72% 0.0822 23.71)",
+          "oklch(84% 0.0822 23.71)",
+          "oklch(95% 0.0822 23.71)"
+        ]
+      },
+      "soft-red-tint": {
+        "role": "tertiary",
+        "displayName": "Soft Red Tint",
+        "tonalRamp": [
+          "oklch(15% 0.1080 22.83 / 0.0784)",
+          "oklch(26% 0.1080 22.83 / 0.0784)",
+          "oklch(38% 0.1080 22.83 / 0.0784)",
+          "oklch(49% 0.1080 22.83 / 0.0784)",
+          "oklch(61% 0.1080 22.83 / 0.0784)",
+          "oklch(72% 0.1080 22.83 / 0.0784)",
+          "oklch(84% 0.1080 22.83 / 0.0784)",
+          "oklch(95% 0.1080 22.83 / 0.0784)"
+        ]
+      },
+      "benchmark-blue": {
+        "role": "secondary",
+        "displayName": "Benchmark Blue",
+        "tonalRamp": [
+          "oklch(15% 0.0841 248.96)",
+          "oklch(26% 0.0841 248.96)",
+          "oklch(38% 0.0841 248.96)",
+          "oklch(49% 0.0841 248.96)",
+          "oklch(61% 0.0841 248.96)",
+          "oklch(72% 0.0841 248.96)",
+          "oklch(84% 0.0841 248.96)",
+          "oklch(95% 0.0841 248.96)"
+        ]
+      },
+      "benchmark-ochre": {
+        "role": "secondary",
+        "displayName": "Benchmark Ochre",
+        "tonalRamp": [
+          "oklch(15% 0.0675 84.81)",
+          "oklch(26% 0.0675 84.81)",
+          "oklch(38% 0.0675 84.81)",
+          "oklch(49% 0.0675 84.81)",
+          "oklch(61% 0.0675 84.81)",
+          "oklch(72% 0.0675 84.81)",
+          "oklch(84% 0.0675 84.81)",
+          "oklch(95% 0.0675 84.81)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page Heading",
+        "purpose": "Compact page titles; 22px at the 600px compact breakpoint."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "15px headings for data and operational sections."
+      },
+      "body": {
+        "displayName": "Interface Body",
+        "purpose": "General interface content with the configured Chinese fallbacks."
+      },
+      "label": {
+        "displayName": "Control Label",
+        "purpose": "Field labels and compact controls."
+      },
+      "metric": {
+        "displayName": "Financial Reading",
+        "purpose": "Tabular monospaced primary readings; 22px at the compact breakpoint."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "control-colors",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Tailwind transition-colors for buttons, fields, and row hover."
+      },
+      {
+        "name": "navigation-state",
+        "value": "color 0.18s, background 0.18s",
+        "purpose": "Desktop destination hover and selected state."
+      },
+      {
+        "name": "chart-refresh",
+        "value": "opacity 0.18s",
+        "purpose": "Dim retained chart data during refresh."
+      },
+      {
+        "name": "skeleton-pulse",
+        "value": "1.7s ease-in-out infinite; opacity: 0.45 at 50%",
+        "purpose": "Stable-size loading placeholders."
+      },
+      {
+        "name": "refresh-rotation",
+        "value": "1s linear infinite; transform: rotate(360deg)",
+        "purpose": "Busy refresh icon."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto",
+        "purpose": "Applied under prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-type",
+        "value": "600px"
+      },
+      {
+        "name": "mobile-shell",
+        "value": "767px"
+      },
+      {
+        "name": "comparison-stack",
+        "value": "900px"
+      },
+      {
+        "name": "metric-four-columns",
+        "value": "1024px"
+      },
+      {
+        "name": "narrow-desktop",
+        "value": "1100px"
+      },
+      {
+        "name": "review-stack",
+        "value": "1150px"
+      },
+      {
+        "name": "wide-desktop",
+        "value": "1700px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Commit an operation or sign in.",
+      "html": "<button class=\"ds-primary\" type=\"button\">登录账户</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 14px;border-radius:6px;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:12px;font-weight:500;line-height:16px;letter-spacing:0;cursor:pointer;transition:color 150ms cubic-bezier(.4,0,.2,1),background-color 150ms cubic-bezier(.4,0,.2,1),border-color 150ms cubic-bezier(.4,0,.2,1);border:0;background:var(--pos,#afd4bf);color:var(--bg,#111314)}.ds-primary:hover{background:var(--pos-bright,#c6e1d1)}.ds-primary:focus-visible{outline:2px solid var(--benchmark-a,#8cbbea);outline-offset:4px;}.ds-primary:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions, retries, and snapshot commands.",
+      "html": "<button class=\"ds-ghost\" type=\"button\">重新加载</button>",
+      "css": ".ds-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 14px;border-radius:6px;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:12px;font-weight:500;line-height:16px;letter-spacing:0;cursor:pointer;transition:color 150ms cubic-bezier(.4,0,.2,1),background-color 150ms cubic-bezier(.4,0,.2,1),border-color 150ms cubic-bezier(.4,0,.2,1);border:1px solid #353b3e;background:transparent;color:#c9d0d2}.ds-ghost:hover{background:var(--panel2,#222629)}.ds-ghost:focus-visible{outline:2px solid var(--benchmark-a,#8cbbea);outline-offset:4px;}.ds-ghost:disabled{opacity:.5;cursor:not-allowed}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "Fixed-size Lucide tool control with an accessible tooltip.",
+      "html": "<button class=\"ds-icon\" type=\"button\" aria-label=\"刷新数据\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg></button>",
+      "css": ".ds-icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;flex:none;border:0;border-radius:6px;color:#9aa5aa;background:transparent;cursor:pointer;transition:color 150ms cubic-bezier(.4,0,.2,1),background-color 150ms cubic-bezier(.4,0,.2,1)}.ds-icon:hover{color:var(--hi,#f5f7f7);background:var(--panel2,#222629)}.ds-icon:focus-visible{outline:2px solid var(--benchmark-a,#8cbbea);outline-offset:4px;}.ds-icon:disabled{opacity:.4;cursor:not-allowed}.ds-icon::after{content:attr(aria-label);position:absolute;top:calc(100% + 6px);right:0;pointer-events:none;white-space:nowrap;z-index:40;color:var(--hi,#f5f7f7);background:var(--panel2,#222629);padding:6px 9px;border:1px solid var(--line,#303537);border-radius:4px;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:11px;opacity:0}.ds-icon:hover::after,.ds-icon:focus-visible::after{opacity:1}"
+    },
+    {
+      "name": "Labelled Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A labelled dark field with mineral-green focus and numeric alignment.",
+      "html": "<label class=\"ds-field\"><span>金额</span><input class=\"ds-input\" inputmode=\"decimal\" placeholder=\"0.00\" /></label>",
+      "css": ".ds-field{display:block;width:260px;max-width:100%;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:12px;line-height:16px;letter-spacing:0;color:var(--mid,#b0b9bc)}.ds-field>span{display:block;margin-bottom:8px}.ds-input{display:block;width:100%;min-height:44px;border:1px solid #353b3e;border-radius:6px;background:var(--bg,#111314);color:var(--hi,#f5f7f7);padding:10px 12px;font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',monospace;font-variant-numeric:tabular-nums;font-size:14px;line-height:20px;caret-color:var(--pos,#afd4bf);transition:border-color 150ms cubic-bezier(.4,0,.2,1)}.ds-input::placeholder{color:var(--lo,#828d92)}.ds-input:hover{border-color:#353b3e}.ds-input:focus,.ds-input:focus-visible{border-color:var(--pos,#afd4bf);outline:none}"
+    },
+    {
+      "name": "Desktop Navigation",
+      "kind": "nav",
+      "refersTo": "nav-active",
+      "description": "Labelled destination with an explicit active row and mineral-green icon.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"主导航\"><a class=\"ds-nav-link ds-nav-active\" href=\"#overview\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg><span>基金总览</span></a><a class=\"ds-nav-link\" href=\"#review\"><span>交易复盘</span></a></nav>",
+      "css": ".ds-nav{display:grid;gap:7px;width:168px;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif}.ds-nav-link{display:flex;gap:11px;align-items:center;padding:12px;border-radius:5px;color:var(--lo,#828d92);font-size:13px;line-height:19.5px;letter-spacing:0;text-decoration:none;transition:color .18s,background .18s}.ds-nav-link:hover{background:var(--panel,#181b1d);color:var(--hi,#f5f7f7)}.ds-nav-link:focus-visible{outline:2px solid var(--benchmark-a,#8cbbea);outline-offset:4px;}.ds-nav-active,.ds-nav-active:hover{background:var(--panel2,#222629);color:var(--hi,#f5f7f7)}.ds-nav-active svg{color:var(--pos,#afd4bf)}"
+    },
+    {
+      "name": "Positive Chip",
+      "kind": "chip",
+      "refersTo": "chip-positive",
+      "description": "Positive result or long/buy direction, always identified in text.",
+      "html": "<span class=\"ds-positive\">LONG</span>",
+      "css": ".ds-positive{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;background:rgb(175 212 191 / .08);color:var(--pos,#afd4bf);font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:500;line-height:20px;letter-spacing:0}"
+    },
+    {
+      "name": "Negative Chip",
+      "kind": "chip",
+      "refersTo": "chip-negative",
+      "description": "Negative result or short/sell direction, always identified in text.",
+      "html": "<span class=\"ds-negative\">SHORT</span>",
+      "css": ".ds-negative{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;background:rgb(229 141 137 / .08);color:var(--neg,#e58d89);font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:500;line-height:20px;letter-spacing:0}"
+    },
+    {
+      "name": "Range Segments",
+      "kind": "custom",
+      "refersTo": "segment-active",
+      "description": "Wrapping range control with a stable selected segment.",
+      "html": "<div class=\"ds-ranges\" role=\"group\" aria-label=\"收益时间范围\"><button class=\"ds-segment\" type=\"button\" aria-pressed=\"false\">7 天</button><button class=\"ds-segment ds-selected\" type=\"button\" aria-pressed=\"true\">30 天</button><button class=\"ds-segment\" type=\"button\" aria-pressed=\"false\">全部</button></div>",
+      "css": ".ds-ranges{display:flex;flex-wrap:wrap;gap:2px}.ds-segment{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:4px 9px;border:0;border-radius:4px;font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;font-size:11px;font-weight:500;line-height:16px;letter-spacing:0;background:transparent;color:#9aa5aa;cursor:pointer;transition:color 150ms cubic-bezier(.4,0,.2,1),background-color 150ms cubic-bezier(.4,0,.2,1)}.ds-segment:hover{color:var(--hi,#f5f7f7);background:var(--panel2,#222629)}.ds-segment:focus-visible{outline:2px solid var(--benchmark-a,#8cbbea);outline-offset:4px;}.ds-selected,.ds-selected:hover{color:var(--hi,#f5f7f7);background:#353b3e}"
+    },
+    {
+      "name": "Metric Band",
+      "kind": "custom",
+      "refersTo": "metric-band",
+      "description": "Unframed, divided readings with aligned labels, values, and supporting notes. Sample values are illustrative.",
+      "html": "<div class=\"ds-metrics\"><div class=\"ds-metric\"><div class=\"ds-metric-label\">基金总权益 · USDT</div><div class=\"ds-metric-value\">125,000.00</div><div class=\"ds-metric-note\">4 位成员</div></div><div class=\"ds-metric\"><div class=\"ds-metric-label\">基金单位净值</div><div class=\"ds-metric-value\">1.0842</div><div class=\"ds-metric-note\">NAV</div></div></div>",
+      "css": ".ds-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid rgb(53 59 62 / .7);border-bottom:1px solid rgb(53 59 62 / .7);color:var(--hi,#f5f7f7);font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;letter-spacing:0}.ds-metric{min-width:0;padding:20px 16px 20px 0}.ds-metric+.ds-metric{border-left:1px solid var(--line,#303537);padding-left:24px}.ds-metric-label{font-size:12px;line-height:16px;color:#9aa5aa;margin-bottom:10px}.ds-metric-value{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',monospace;font-size:26px;line-height:1.25;font-weight:500;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.ds-metric-note{font-size:12px;line-height:16px;color:#9aa5aa;margin-top:8px}@media(max-width:600px){.ds-metric-value{font-size:22px}.ds-metric+.ds-metric{padding-left:16px}.ds-metric-note{font-size:11px}}"
+    },
+    {
+      "name": "Individual Metric Container",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Retained library primitive for an individual metric; routed page sections use unframed bands. Sample values are illustrative.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-label\">资产估值</div><div class=\"ds-card-value\">12,500.00</div><div class=\"ds-card-note\">USDT</div></div>",
+      "css": ".ds-card{max-width:280px;padding:20px;border:1px solid rgb(53 59 62 / .7);border-radius:6px;background:var(--panel,#181b1d);color:var(--hi,#f5f7f7);font-family:'Manrope','PingFang SC','Microsoft YaHei',ui-sans-serif,system-ui,sans-serif;letter-spacing:0}.ds-card-label{font-size:12px;line-height:16px;font-weight:500;color:#9aa5aa}.ds-card-value{font-family:'IBM Plex Mono',ui-monospace,'SFMono-Regular',monospace;font-variant-numeric:tabular-nums;font-size:26px;font-weight:500;line-height:1.5;margin-top:8px}.ds-card-note{margin-top:8px;font-size:12px;line-height:1.625;color:#9aa5aa}"
+    }
+  ],
+  "narrative": {
+    "northStar": "石墨投研台 / Graphite Research Workstation",
+    "overview": "The graphite research workstation (石墨投研台) is XG fund's restrained, continuous workspace for inspecting balances, exposure, and performance. Neutral graphite surfaces, pale mineral green, aligned numerals, and compact divisions make repeated comparison the dominant visual activity.\n\nThe interface stays flat and information-led. Manrope carries navigation and labels; IBM Plex Mono separates financial readings from prose. Color identifies fund performance, benchmarks, losses, and control state. Lucide icons and data-derived charts supply the visual assets; there is no shipping raster imagery.",
+    "keyCharacteristics": [
+      "Flat graphite surfaces with fine dividers.",
+      "Compact headings and aligned financial numerals.",
+      "Mineral green actions, distinct benchmark colors, and soft red losses.",
+      "Desktop comparison layouts that collapse into direct mobile reading order."
+    ],
+    "rules": [
+      {
+        "name": "The Data Color Rule",
+        "body": "Use the established fund, benchmark, and gain/loss colors consistently; pair color with labels, signs, or direction text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Aligned Number Rule",
+        "body": "Use IBM Plex Mono and tabular numerals for financial values; preserve precision, units, and financial meaning.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Workspace Rule",
+        "body": "Separate page sections with spacing and fine rules. Reserve a bordered container for an individual item or a genuinely framed control.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the XG fund identity and graphite, mineral-green visual world.",
+      "Do give amounts, percentages, units, timestamps, and data freshness stable, legible positions.",
+      "Do use the same semantic colors and aligned number treatment across charts, tables, and summaries.",
+      "Do preserve visible focus, labelled icon controls, loading states, and touch-friendly interactions.",
+      "Do let sections reflow and let wide tables scroll within their own region."
+    ],
+    "donts": [
+      "Don't turn routed page sections into stacks of floating cards.",
+      "Don't add decorative gradients, illustrations, or motion to the financial workspace.",
+      "Don't encode a financial distinction through color alone.",
+      "Don't enlarge compact-panel headings into hero typography or scale type continuously with viewport width.",
+      "Don't hide chart readings beneath pointer-following overlays or let changing values shift adjacent controls."
+    ]
+  }
+}

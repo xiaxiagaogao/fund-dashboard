@@ -1,94 +1,116 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { RefreshCw } from "lucide-svelte";
   import {
     api,
     type Me,
     type EquityPoint,
     type DayPnL,
     type Position,
-    type StatsResponse
-  } from '$lib/api';
-  import DrawdownChart from '$lib/components/DrawdownChart.svelte';
-  import CalendarHeatmap from '$lib/components/CalendarHeatmap.svelte';
-  import StatsCards from '$lib/components/StatsCards.svelte';
-  import OpenPositions from '$lib/components/OpenPositions.svelte';
-  import ClosedTrades from '$lib/components/ClosedTrades.svelte';
-  import SymbolPnLBars from '$lib/components/SymbolPnLBars.svelte';
-
+    type StatsResponse,
+  } from "$lib/api";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import AsyncState from "$lib/components/AsyncState.svelte";
+  import DrawdownChart from "$lib/components/DrawdownChart.svelte";
+  import CalendarHeatmap from "$lib/components/CalendarHeatmap.svelte";
+  import StatsCards from "$lib/components/StatsCards.svelte";
+  import OpenPositions from "$lib/components/OpenPositions.svelte";
+  import ClosedTrades from "$lib/components/ClosedTrades.svelte";
+  import SymbolPnLBars from "$lib/components/SymbolPnLBars.svelte";
   let me: Me | null = null;
-  let curve: EquityPoint[] = [];
-  let daily: DayPnL[] = [];
-  let openPositions: Position[] = [];
-  let closedPositions: Position[] = [];
+  let curve: EquityPoint[] = [],
+    daily: DayPnL[] = [],
+    openPositions: Position[] = [],
+    closedPositions: Position[] = [];
   let stats: StatsResponse | null = null;
-  let positionsAvailable = true;
-  let loading = true;
-  let error = '';
-
-  async function load() {
+  let loading = true,
+    refreshing = false;
+  let error = "",
+    positionError = "",
+    chartError = "";
+  async function load(initial = true) {
+    if (refreshing) return;
+    refreshing = true;
+    if (initial) loading = true;
+    error = "";
+    positionError = "";
+    chartError = "";
     try {
       me = await api.me();
       if (!me.is_admin) {
-        goto('/');
+        await goto("/");
         return;
       }
-      const from = Date.now() - 180 * 24 * 60 * 60 * 1000;
-      [curve, daily] = await Promise.all([api.equityCurve(from), api.dailyPnl(180)]);
-    } catch (e) {
-      error = e instanceof Error ? e.message : '加载失败';
-      loading = false;
-      return;
-    }
-    try {
-      [openPositions, closedPositions, stats] = await Promise.all([
+      const from = Date.now() - 180 * 86400000;
+      const [c, d, o, closed, s] = await Promise.allSettled([
+        api.equityCurve(from),
+        api.dailyPnl(180),
         api.openPositions(),
         api.closedPositions(200),
-        api.stats(500)
+        api.stats(500),
       ]);
-      positionsAvailable = true;
+      if (c.status === "fulfilled") curve = c.value ?? [];
+      else chartError = "回撤数据更新失败";
+      if (d.status === "fulfilled") daily = d.value ?? [];
+      else chartError += `${chartError ? "；" : ""}每日盈亏更新失败`;
+      if (o.status === "fulfilled") openPositions = o.value ?? [];
+      else positionError = "部分持仓或交易数据更新失败，已有数据保留。";
+      if (closed.status === "fulfilled") closedPositions = closed.value ?? [];
+      else positionError = "部分持仓或交易数据更新失败，已有数据保留。";
+      if (s.status === "fulfilled")
+        stats = { ...s.value, by_symbol: s.value.by_symbol ?? [] };
+      else positionError = "部分持仓或交易数据更新失败，已有数据保留。";
     } catch (e) {
-      positionsAvailable = false;
+      error = e instanceof Error ? e.message : "加载失败";
+    } finally {
+      loading = false;
+      refreshing = false;
     }
-    loading = false;
   }
-
-  onMount(load);
+  onMount(() => load());
 </script>
 
-{#if loading}
-  <div class="text-ink-400 text-sm">加载中…</div>
-{:else if error}
-  <div class="card p-6 text-loss-400">{error}</div>
-{:else if me}
-  <div class="hidden md:block mb-6">
-    <div class="text-[11px] text-ink-500 tracking-[0.16em] uppercase mb-1.5">复盘视图 · 仅管理</div>
-    <h1 class="text-[25px] font-extrabold tracking-tight m-0">复盘分析</h1>
+{#if loading || error}<AsyncState {loading} {error} on:retry={() => load()} />
+{:else if me?.is_admin}
+  <PageHeader title="交易复盘" detail="回撤与每日盈亏 · 最近 180 天"
+    ><span class="text-xs text-ink-400"
+      >交易统计 · 最近 {stats?.stats.total ?? 0} 笔</span
+    ><button
+      class="icon-button"
+      aria-label="刷新复盘数据"
+      disabled={refreshing}
+      on:click={() => load(false)}
+      ><RefreshCw size={16} class={refreshing ? "refreshing" : ""} /></button
+    ></PageHeader
+  >
+  {#if positionError}<div class="alert mb-5" role="alert">
+      {positionError}
+    </div>{/if}
+  <StatsCards stats={stats?.stats ?? null} window={stats?.window ?? 0} />
+  {#if chartError}<div class="alert mt-5" role="alert">{chartError}</div>{/if}
+  <div class="review-charts">
+    <DrawdownChart points={curve} /><CalendarHeatmap days={daily} />
   </div>
-  <div class="md:hidden mb-4">
-    <h2 class="text-lg font-bold tracking-tight">复盘分析</h2>
-  </div>
-
-  <div class="flex flex-col gap-3.5 md:gap-4">
-    {#if positionsAvailable}
-      <StatsCards stats={stats?.stats ?? null} window={stats?.window ?? 0} />
-    {/if}
-
-    <DrawdownChart points={curve} height={130} />
-
-    <CalendarHeatmap days={daily} />
-
-    {#if positionsAvailable}
-      <OpenPositions positions={openPositions} />
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 md:gap-4">
-        <div class="lg:col-span-2"><ClosedTrades positions={closedPositions} /></div>
-        <div><SymbolPnLBars rows={stats?.by_symbol ?? []} /></div>
-      </div>
-    {:else}
-      <div class="card p-6 text-ink-400 text-sm">
-        持仓/交易统计暂不可用（Binance 客户端未配置）。回撤与日历来自 fund.db，照常显示。
-      </div>
-    {/if}
+  <div class="data-section"><OpenPositions positions={openPositions} /></div>
+  <div class="workspace-split border-t border-ink-700/70">
+    <div class="section">
+      <ClosedTrades positions={closedPositions} maxRows={8} />
+    </div>
+    <div class="section"><SymbolPnLBars rows={stats?.by_symbol ?? []} /></div>
   </div>
 {/if}
+
+<style>
+  .review-charts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 0.85fr);
+    gap: 28px;
+  }
+  @media (max-width: 1150px) {
+    .review-charts {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+  }
+</style>

@@ -1,82 +1,210 @@
 <script lang="ts">
-  import type { Position } from '$lib/api';
-  import { fmtDuration, fmtUSDT, fmtSignedUSDT, fmtSignedPct } from '$lib/format';
-
+  import { onMount } from "svelte";
+  import { ChevronDown } from "lucide-svelte";
+  import type { Position } from "$lib/api";
+  import {
+    fmtDuration,
+    fmtUSDT,
+    fmtSignedUSDT,
+    fmtSignedPct,
+    pnlClass,
+  } from "$lib/format";
   export let positions: Position[] = [];
-
-  // Live "now" so age ticks without re-fetching the page.
   let now = Date.now();
-  if (typeof window !== 'undefined') {
-    setInterval(() => (now = Date.now()), 30_000);
-  }
-
-  $: notional = positions.reduce((s, p) => s + Math.abs((p.mark_price ?? p.entry_price) * p.quantity), 0);
-  $: totalUnrealized = positions.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0);
-  // Money these positions have ALREADY banked via partial closes, net of fees.
-  // It is not floating PnL and was previously invisible everywhere.
+  onMount(() => {
+    const timer = setInterval(() => (now = Date.now()), 30_000);
+    return () => clearInterval(timer);
+  });
+  $: totalUnrealized = positions.reduce(
+    (s, p) => s + (p.unrealized_pnl ?? 0),
+    0,
+  );
   $: totalRealized = positions.reduce(
     (s, p) => s + (p.realized_pnl ?? 0) - (p.commission ?? 0),
-    0
+    0,
   );
-  $: hasRealized = positions.some((p) => p.realized_pnl || p.commission);
-
-  function fmtPx(v: number): string {
-    const dp = v < 10 ? 4 : v < 1000 ? 2 : 1;
-    return v.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
-  }
+  const net = (p: Position) => (p.realized_pnl ?? 0) - (p.commission ?? 0);
+  const fmtPx = (v: number) => fmtUSDT(v, v < 10 ? 4 : 2);
+  const change = (p: Position) =>
+    p.entry_price > 0
+      ? (((p.mark_price ?? p.entry_price) - p.entry_price) / p.entry_price) *
+        (p.side === "LONG" || p.side === "BUY" ? 1 : -1)
+      : 0;
 </script>
 
-<div class="card p-4 sm:p-5">
-  <div class="flex items-baseline justify-between gap-4 mb-3">
-    <div class="text-[13px] font-bold">当前持仓明细</div>
-    <div class="text-right">
-      <div class="font-mono text-[11px] text-ink-400">{positions.length} 个 · 名义 {fmtUSDT(notional, 0)} USDT</div>
-      <div class={'font-mono text-[11px] mt-0.5 ' + (totalUnrealized > 0 ? 'pos' : totalUnrealized < 0 ? 'neg' : 'text-ink-300')}>
-        浮动 {fmtSignedUSDT(totalUnrealized, 2)}
-      </div>
-      {#if hasRealized}
-        <div class={'font-mono text-[11px] mt-0.5 ' + (totalRealized > 0 ? 'pos' : totalRealized < 0 ? 'neg' : 'text-ink-300')}>
-          已实现 {fmtSignedUSDT(totalRealized, 2)}
-        </div>
-      {/if}
+<section aria-label="当前持仓明细">
+  <div class="section-head">
+    <h2>
+      当前持仓 <span class="text-xs text-ink-400 font-normal ml-2"
+        >{positions.length}</span
+      >
+    </h2>
+    <div class="position-summary">
+      <span
+        >浮动 <span class={"number " + pnlClass(totalUnrealized)}
+          >{fmtSignedUSDT(totalUnrealized)}</span
+        ></span
+      ><span
+        >已实现净收益 <span class={"number " + pnlClass(totalRealized)}
+          >{fmtSignedUSDT(totalRealized)}</span
+        ></span
+      >
     </div>
   </div>
-
-  {#if positions.length === 0}
-    <div class="py-10 text-center text-ink-500 text-sm">手上没单</div>
+  {#if positions.length === 0}<div class="empty-state">当前没有持仓</div>
   {:else}
-    <div class="flex flex-col">
-      {#each positions as p}
-        {@const isLong = p.side === 'LONG' || p.side === 'BUY'}
-        {@const mark = p.mark_price ?? p.entry_price}
-        {@const pricePct = p.entry_price > 0 ? (mark - p.entry_price) / p.entry_price : 0}
-        {@const effectivePct = isLong ? pricePct : -pricePct}
-        <div class="flex items-center gap-2.5 py-2.5 border-b border-white/[0.04] last:border-0">
-          <div class="min-w-0">
-            <div class="flex items-center gap-1.5">
-              <span class="text-[13px] font-bold">{p.symbol.replace('USDT', '')}</span>
-              <span class={'text-[9px] rounded px-1 border ' + (isLong ? 'text-accent-400 border-accent-500/30' : 'text-loss-400 border-loss-500/30')}>
-                {isLong ? '多' : '空'}
-              </span>
+    <div class="desktop-positions table-scroll">
+      <table class="data-table">
+        <thead
+          ><tr
+            ><th>标的 / 方向</th><th class="text-right">开仓价</th><th
+              class="text-right">标记价</th
+            ><th class="text-right">持仓数量</th><th class="text-right"
+              >浮动盈亏</th
+            ><th class="text-right">已实现净收益</th><th class="text-right"
+              >持仓时长</th
+            ></tr
+          ></thead
+        ><tbody
+          >{#each positions as p}<tr class="table-row-hover"
+              ><td
+                ><div class="flex items-center gap-3">
+                  <strong class="text-[13px] font-semibold"
+                    >{p.symbol.replace(/USDT$/, "")}</strong
+                  ><span
+                    class={p.side === "LONG" || p.side === "BUY"
+                      ? "pill-pos"
+                      : "pill-neg"}
+                    >{p.side === "LONG" || p.side === "BUY" ? "多" : "空"}</span
+                  >
+                </div></td
+              ><td class="number text-right text-xs text-ink-300"
+                >{fmtPx(p.entry_price)}</td
+              ><td class="number text-right text-xs text-ink-300"
+                >{fmtPx(p.mark_price ?? p.entry_price)}</td
+              ><td class="number text-right text-xs text-ink-300"
+                >{fmtUSDT(p.quantity, 4)}</td
+              ><td
+                class={"number text-right text-xs " +
+                  pnlClass(p.unrealized_pnl ?? 0)}
+                >{p.unrealized_pnl === undefined
+                  ? "—"
+                  : fmtSignedUSDT(p.unrealized_pnl)}
+                <div class="text-[10px] mt-1">
+                  {fmtSignedPct(change(p))}
+                </div></td
+              ><td class={"number text-right text-xs " + pnlClass(net(p))}
+                >{fmtSignedUSDT(net(p))}</td
+              ><td class="text-right text-xs text-ink-400 whitespace-nowrap"
+                >{fmtDuration(now - p.entry_time)}</td
+              ></tr
+            >{/each}</tbody
+        >
+      </table>
+    </div>
+    <div class="mobile-positions">
+      {#each positions as p}<details>
+          <summary
+            ><span class="flex items-center gap-2"
+              ><strong>{p.symbol.replace(/USDT$/, "")}</strong><span
+                class={p.side === "LONG" || p.side === "BUY"
+                  ? "pill-pos"
+                  : "pill-neg"}
+                >{p.side === "LONG" || p.side === "BUY" ? "多" : "空"}</span
+              ></span
+            ><span class="text-right"
+              ><span class={"number " + pnlClass(p.unrealized_pnl ?? 0)}
+                >{p.unrealized_pnl === undefined
+                  ? "—"
+                  : fmtSignedUSDT(p.unrealized_pnl)}</span
+              ><span class="block text-ink-400 text-[10px] mt-1"
+                >浮动盈亏 · USDT</span
+              ></span
+            ><ChevronDown size={14} class="disclosure-icon" /></summary
+          >
+          <dl>
+            <div>
+              <dt>开仓 / 标记价</dt>
+              <dd class="number">
+                {fmtPx(p.entry_price)} / {fmtPx(p.mark_price ?? p.entry_price)}
+              </dd>
             </div>
-            <div class="text-[10px] text-ink-500 font-mono mt-1 whitespace-nowrap">
-              {fmtPx(p.entry_price)} → {fmtPx(mark)} · {p.entry_time ? fmtDuration(now - p.entry_time) : '—'}
+            <div>
+              <dt>价格变动</dt>
+              <dd class={"number " + pnlClass(change(p))}>
+                {fmtSignedPct(change(p))}
+              </dd>
             </div>
-          </div>
-          <div class="ml-auto text-right">
-            <div class={'font-mono text-[13px] font-semibold ' + ((p.unrealized_pnl ?? 0) >= 0 ? 'pos' : 'neg')}>
-              {p.unrealized_pnl !== undefined ? fmtSignedUSDT(p.unrealized_pnl, 2) : '—'}
+            <div>
+              <dt>数量</dt>
+              <dd class="number">{fmtUSDT(p.quantity, 4)}</dd>
             </div>
-            <div class="text-[10px] font-mono mt-1 whitespace-nowrap">
-              <span class={effectivePct >= 0 ? 'pos' : 'neg'}>{fmtSignedPct(effectivePct)}</span>
-              {#if p.realized_pnl || p.commission}
-                {@const banked = (p.realized_pnl ?? 0) - (p.commission ?? 0)}
-                <span class="text-ink-500"> · 已实现 </span><span class={banked >= 0 ? 'pos' : 'neg'}>{fmtSignedUSDT(banked, 2)}</span>
-              {/if}
+            <div>
+              <dt>已实现净收益</dt>
+              <dd class={"number " + pnlClass(net(p))}>
+                {fmtSignedUSDT(net(p))}
+              </dd>
             </div>
-          </div>
-        </div>
-      {/each}
+            <div>
+              <dt>持仓时长</dt>
+              <dd>{fmtDuration(now - p.entry_time)}</dd>
+            </div>
+          </dl>
+        </details>{/each}
     </div>
   {/if}
-</div>
+</section>
+
+<style>
+  .position-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    font-size: 11px;
+    color: var(--lo);
+  }
+  .position-summary .number {
+    margin-left: 6px;
+  }
+  .desktop-positions table {
+    min-width: 700px;
+  }
+  .mobile-positions {
+    display: none;
+  }
+  @media (max-width: 767px) {
+    .desktop-positions {
+      display: none;
+    }
+    .mobile-positions {
+      display: block;
+    }
+    details {
+      border-top: 1px solid var(--panel2);
+    }
+    summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 17px 0;
+      font-size: 13px;
+    }
+    summary :global(.disclosure-icon) { color: var(--lo); flex: none; transition: transform .18s; }
+    details[open] summary :global(.disclosure-icon) { transform: rotate(180deg); }
+    dl {
+      display: grid;
+      gap: 11px;
+      padding: 0 0 18px;
+      font-size: 11px;
+    }
+    dl div {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    dt {
+      color: var(--lo);
+    }
+  }
+</style>

@@ -1,145 +1,402 @@
 <script lang="ts">
-  import '../app.css';
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { api, type Me } from '$lib/api';
+  import "../app.css";
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
+  import {
+    Activity,
+    ChartNoAxesCombined,
+    SlidersHorizontal,
+    LogOut,
+    ArrowUpRight,
+  } from "lucide-svelte";
+  import { api } from "$lib/api";
+  import { session } from "$lib/session";
 
-  let me: Me | null = null;
   let loading = true;
-
+  let exiting = false;
   onMount(async () => {
-    const publicPath = $page.url.pathname === '/login';
     try {
-      me = await api.me();
-    } catch (e) {
-      me = null;
-      if (!publicPath) {
-        goto('/login');
-        return;
-      }
+      $session = await api.me();
+    } catch {
+      $session = null;
+      if ($page.url.pathname !== "/login") await goto("/login");
     } finally {
       loading = false;
     }
   });
-
   async function logout() {
+    exiting = true;
     try {
       await api.logout();
-    } catch {}
-    me = null;
-    goto('/login');
+    } catch {
+      exiting = false;
+      return;
+    }
+    $session = null;
+    exiting = false;
+    await goto("/login");
   }
-
   $: path = $page.url.pathname;
-  $: showShell = !!me && path !== '/login';
-
-  // Nav destinations the current user can reach. 复盘 + Admin are operator-only.
-  $: navItems = me
-    ? [
-        { href: '/', label: '我的看板', icon: 'activity' },
-        ...(me.is_admin
-          ? [
-              { href: '/review', label: '复盘分析', icon: 'bars' },
-              { href: '/admin', label: '管理', icon: 'cog' }
-            ]
-          : [])
-      ]
-    : [];
-  $: isActive = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+  $: navItems = [
+    {
+      href: "/",
+      label: $session?.is_admin ? "基金总览" : "我的资产",
+      icon: Activity,
+    },
+    ...($session?.is_admin
+      ? [
+          { href: "/review", label: "交易复盘", icon: ChartNoAxesCombined },
+          { href: "/admin", label: "基金管理", icon: SlidersHorizontal },
+        ]
+      : []),
+  ];
 </script>
 
+<svelte:head
+  ><title
+    >{navItems.find((n) => n.href === path)?.label ?? "登录"} · XG fund</title
+  ></svelte:head
+>
+
 {#if loading}
-  <div class="min-h-screen flex items-center justify-center text-ink-400 text-sm">加载中…</div>
-{:else if showShell && me}
-  <div class="md:flex min-h-screen">
-    <!-- Desktop sidebar -->
-    <aside class="hidden md:flex w-[236px] flex-none flex-col gap-7 border-r border-white/[0.08] px-4 py-6 sticky top-0 h-screen">
-      <div class="flex items-center gap-3 px-1.5">
-        <div class="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center flex-none shadow-glow"
-          style="background:linear-gradient(140deg,var(--pos),oklch(0.66 0.11 182))">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--bg)" aria-hidden="true">
-            <path d="M1.5 20 L8.5 6.5 L12.5 15 L15.5 10.5 L22.5 20 Z" />
-          </svg>
-        </div>
-        <div>
-          <div class="text-sm font-extrabold tracking-tight leading-none">XG fund</div>
-        </div>
-      </div>
-
-      <nav class="flex flex-col gap-1">
-        <div class="text-[10px] text-ink-500 tracking-[0.16em] uppercase px-2 pb-2">导航</div>
-        {#each navItems as item}
-          <a href={item.href}
-            class={'flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors ' +
-              (isActive(item.href) ? 'bg-ink-800 text-ink-50' : 'text-ink-400 hover:text-ink-100 hover:bg-white/[0.03]')}>
-            <span class={'w-1.5 h-1.5 rounded-full flex-none ' + (isActive(item.href) ? '' : 'opacity-40')}
-              style={isActive(item.href) ? 'background:var(--pos)' : 'background:currentColor'}></span>
-            {item.label}
-          </a>
-        {/each}
+  <div class="boot-state" role="status" aria-label="正在加载账户">
+    <div class="text-lg font-semibold">XG fund</div>
+    <div class="skeleton h-1 w-36 mt-5"></div>
+  </div>
+{:else if $session && path !== "/login"}
+  <a class="skip-link" href="#main">跳到内容</a>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="XG fund 首页"
+        ><span class="brand-mark"
+          ><ChartNoAxesCombined size={21} strokeWidth={1.6} /></span
+        ><span>XG <span class="font-normal text-ink-400">fund</span></span></a
+      >
+      <nav aria-label="主导航" class="desktop-nav">
+        {#each navItems as item}<a
+            href={item.href}
+            class:active={path === item.href}
+            aria-current={path === item.href ? "page" : undefined}
+            ><svelte:component
+              this={item.icon}
+              size={18}
+              strokeWidth={1.7}
+            /><span>{item.label}</span></a
+          >{/each}
       </nav>
-
-      <div class="mt-auto border-t border-white/[0.08] pt-4 flex flex-col gap-3">
-        <div class="flex items-center gap-2.5 text-[11px] text-ink-300">
-          <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:var(--pos)"></span>
-          实时 · 30 分钟快照
-        </div>
-        <div class="flex items-center gap-2.5">
-          <div class="w-[30px] h-[30px] rounded-full bg-ink-800 border border-white/[0.08] flex items-center justify-center text-xs font-bold flex-none">
-            {me.name.slice(0, 1)}
+      <div class="sidebar-foot">
+        <div class="account-row">
+          <div class="account-avatar">{$session.name.slice(0, 1)}</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold truncate">{$session.name}</div>
+            <div class="text-[11px] text-ink-400 mt-1">
+              {$session.is_admin ? "基金管理员" : "基金成员"}
+            </div>
           </div>
-          <div class="leading-tight min-w-0">
-            <div class="text-xs font-semibold truncate">{me.name}</div>
-            <div class="text-[10px] text-ink-500">{me.is_admin ? '管理 · 透明账本' : '成员 · 透明账本'}</div>
-          </div>
-          <button class="ml-auto text-ink-500 hover:text-ink-200 text-xs" on:click={logout} aria-label="退出">退出</button>
+          <button
+            class="icon-button"
+            on:click={logout}
+            disabled={exiting}
+            aria-label="退出登录"><LogOut size={16} /></button
+          >
         </div>
       </div>
     </aside>
-
-    <!-- Mobile top header -->
-    <header class="md:hidden sticky top-0 z-10 backdrop-blur bg-ink-950/80 border-b border-white/[0.08] px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-2.5">
-        <div class="w-[26px] h-[26px] rounded-lg flex items-center justify-center flex-none"
-          style="background:linear-gradient(140deg,var(--pos),oklch(0.66 0.11 182))">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="var(--bg)" aria-hidden="true">
-            <path d="M1.5 20 L8.5 6.5 L12.5 15 L15.5 10.5 L22.5 20 Z" />
-          </svg>
+    <div class="main-column">
+      <header class="topbar">
+        <a class="mobile-brand" href="/"
+          >XG <span class="font-normal text-ink-400">fund</span></a
+        >
+        <div class="desktop-location">
+          <span>XG fund</span><span class="text-ink-600">/</span><span
+            class="text-ink-200"
+            >{navItems.find((n) => n.href === path)?.label}</span
+          >
         </div>
-        <div class="text-sm font-extrabold tracking-tight">XG fund</div>
-      </div>
-      <button class="text-ink-400 hover:text-ink-100 text-xs" on:click={logout}>退出</button>
-    </header>
-
-    <!-- Main -->
-    <main class="flex-1 min-w-0 px-4 md:px-8 py-5 md:py-7 pb-24 md:pb-12">
-      <div class="max-w-5xl mx-auto">
-        <slot />
-      </div>
-    </main>
-
-    <!-- Mobile bottom tab bar (only when there's more than one destination) -->
-    {#if navItems.length > 1}
-      <nav class="md:hidden fixed bottom-0 inset-x-0 z-10 flex px-6 pt-2 pb-7 border-t border-white/[0.08]"
-        style="background:oklch(0.18 0.008 240 / 0.86);backdrop-filter:blur(16px)">
-        {#each navItems as item}
-          <a href={item.href}
-            class={'flex-1 flex flex-col items-center gap-1 py-1.5 transition-colors ' +
-              (isActive(item.href) ? 'text-accent-400' : 'text-ink-500')}>
-            {#if item.icon === 'activity'}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h4l2 5 4-13 2 8h6" /></svg>
-            {:else if item.icon === 'bars'}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="8" rx="1" /><rect x="10" y="7" width="4" height="13" rx="1" /><rect x="17" y="3" width="4" height="17" rx="1" /></svg>
-            {:else}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-            {/if}
-            <span class="text-[10px] font-semibold">{item.label}</span>
-          </a>
-        {/each}
-      </nav>
-    {/if}
+        <div class="topbar-right">
+          <span class="text-xs text-ink-400">USDT</span><span
+            class="topbar-divider"
+          ></span><span class="text-xs text-ink-300">{$session.name}</span
+          ><button
+            class="icon-button mobile-logout"
+            on:click={logout}
+            disabled={exiting}
+            aria-label="退出登录"><LogOut size={16} /></button
+          >
+        </div>
+      </header>
+      {#if import.meta.env.VITE_PREVIEW}<div
+          class="preview-notice"
+          role="status"
+        >
+          本地预览 · 演示数据 · 操作仅保存在预览内存中
+        </div>{/if}
+      <main id="main" tabindex="-1"><slot /></main>
+      <footer class="page-footer">
+        <span>XG fund</span><span
+          >NAV 单位法核算 <ArrowUpRight size={12} /></span
+        >
+      </footer>
+    </div>
+    {#if navItems.length > 1}<nav aria-label="手机导航" class="mobile-nav">
+        {#each navItems as item}<a
+            href={item.href}
+            class:active={path === item.href}
+            aria-current={path === item.href ? "page" : undefined}
+            ><svelte:component
+              this={item.icon}
+              size={20}
+              strokeWidth={1.7}
+            /><span>{item.label}</span></a
+          >{/each}
+      </nav>{/if}
   </div>
-{:else}
-  <slot />
-{/if}
+{:else}<slot />{/if}
+
+<style>
+  .boot-state {
+    min-height: 100vh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+  }
+  .app-shell {
+    min-height: 100vh;
+  }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--line);
+    padding: 28px 16px 18px;
+    background: var(--bg);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 9px;
+    font-size: 21px;
+    font-weight: 700;
+  }
+  .brand-mark {
+    width: 29px;
+    height: 29px;
+    display: grid;
+    place-items: center;
+    color: var(--pos);
+  }
+  .desktop-nav {
+    display: grid;
+    gap: 7px;
+    margin-top: 48px;
+  }
+  .desktop-nav a {
+    display: flex;
+    gap: 11px;
+    align-items: center;
+    padding: 12px;
+    border-radius: 5px;
+    color: var(--lo);
+    font-size: 13px;
+    transition:
+      color 0.18s,
+      background 0.18s;
+  }
+  .desktop-nav a:hover {
+    background: var(--panel);
+    color: var(--hi);
+  }
+  .desktop-nav a.active {
+    background: var(--panel2);
+    color: var(--hi);
+  }
+  .desktop-nav a.active :global(svg) {
+    color: var(--pos);
+  }
+  .sidebar-foot {
+    margin-top: auto;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .account-row {
+    display: flex;
+    gap: 9px;
+    align-items: center;
+  }
+  .account-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--panel2);
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    color: var(--mid);
+    flex: none;
+  }
+  .account-row :global(.icon-button) {
+    width: 28px;
+    height: 34px;
+  }
+  .main-column {
+    margin-left: 200px;
+  }
+  .topbar {
+    height: 65px;
+    border-bottom: 1px solid var(--line);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .desktop-location {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--lo);
+  }
+  .topbar-right {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    min-width: 0;
+  }
+  .topbar-right > span:last-of-type {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar-divider {
+    height: 13px;
+    width: 1px;
+    background: var(--line);
+  }
+  main {
+    max-width: 1500px;
+    margin: auto;
+    padding: 32px 36px 8px;
+    outline: none;
+  }
+  .page-footer {
+    max-width: 1500px;
+    margin: auto;
+    padding: 24px 36px 30px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--lo);
+  }
+  .page-footer span:last-child {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mobile-brand,
+  .mobile-nav,
+  .topbar-right :global(.mobile-logout) {
+    display: none;
+  }
+  .preview-notice {
+    background: #afd4bf08;
+    color: var(--mid);
+    border-bottom: 1px solid var(--line);
+    padding: 7px 16px;
+    text-align: center;
+    font-size: 11px;
+  }
+  .skip-link {
+    position: fixed;
+    left: 16px;
+    top: -60px;
+    padding: 10px;
+    background: var(--pos);
+    color: var(--bg);
+    z-index: 50;
+  }
+  .skip-link:focus {
+    top: 12px;
+  }
+  @media (min-width: 1700px) {
+    main {
+      padding-top: 40px;
+    }
+  }
+  @media (max-width: 1100px) {
+    .sidebar {
+      width: 176px;
+      padding-inline: 12px;
+    }
+    .main-column {
+      margin-left: 176px;
+    }
+    main {
+      padding-inline: 24px;
+    }
+  }
+  @media (max-width: 767px) {
+    .sidebar,
+    .desktop-location {
+      display: none;
+    }
+    .main-column {
+      margin-left: 0;
+      padding-bottom: 70px;
+    }
+    .topbar {
+      padding: 0 18px;
+      height: 58px;
+    }
+    .mobile-brand {
+      display: block;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .topbar-right {
+      gap: 10px;
+    }
+    .topbar-right :global(.mobile-logout) {
+      display: inline-flex;
+      width: 30px;
+    }
+    main {
+      padding: 24px 18px 4px;
+    }
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      z-index: 30;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+      padding: 7px 12px max(9px, env(safe-area-inset-bottom));
+    }
+    .mobile-nav a {
+      flex: 1;
+      min-height: 46px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: var(--lo);
+    }
+    .mobile-nav a.active {
+      color: var(--pos);
+    }
+    .page-footer {
+      padding: 20px 18px 24px;
+    }
+  }
+</style>

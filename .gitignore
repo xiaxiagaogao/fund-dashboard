@@ -18,3 +18,7 @@ dist/
 .DS_Store
 .claude/
 Fund dashboard frontend design/
+# Local design decisions and browser verification captures.
+.impeccable/direction.json
+.impeccable/questions/
+.impeccable/review/
