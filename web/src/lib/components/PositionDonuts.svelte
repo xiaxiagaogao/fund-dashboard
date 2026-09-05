@@ -2,20 +2,72 @@
   import { Wallet, Clock3 } from "lucide-svelte";
   import type { Allocation } from "$lib/api";
   import { fmtUSDT, fmtPct, fmtDate } from "$lib/format";
+  import AllocationDonut from "./AllocationDonut.svelte";
   export let alloc: Allocation | null = null;
   export let loading = false;
   const colors = [
     "var(--pos)",
     "var(--benchmark-a)",
     "var(--benchmark-b)",
-    "#bab0d3",
-    "#c2b8a6",
+    "#b8a4cf",
+    "#d795aa",
+    "#71b7ad",
+    "#bfc98d",
+    "#daab86",
+    "#9caccb",
+    "#b88f86",
+    "#a7b7a1",
+    "#82b5c7",
+    "#c3becf",
   ];
+  let capitalSelected: string | null = null;
+  let capitalHovered: string | null = null;
+  let holdingSelected: string | null = null;
+  let holdingHovered: string | null = null;
   $: usage =
     alloc && alloc.equity > 0 ? alloc.margin_used / alloc.equity : null;
   $: holdings = [...(alloc?.positions ?? [])].sort(
     (a, b) => b.notional - a.notional,
   );
+  $: capitalItems = alloc
+    ? [
+        {
+          id: "margin",
+          label: `已用保证金 ${fmtUSDT(alloc.margin_used)} USDT`,
+          value: Math.max(0, alloc.margin_used),
+          color: "var(--pos)",
+        },
+        {
+          id: "cash",
+          label: `闲置资金 ${fmtUSDT(alloc.free_cash)} USDT`,
+          value: Math.max(0, alloc.free_cash),
+          color: "#4a565b",
+        },
+      ]
+    : [];
+  $: holdingItems = holdings.map((position, index) => ({
+    ...position,
+    id: `${position.symbol}:${position.side}`,
+    name: position.symbol.replace(/USDT$/, ""),
+    label: `${position.symbol.replace(/USDT$/, "")} ${position.side === "LONG" ? "多" : "空"}，占比 ${fmtPct(position.pct, 1)}，${fmtUSDT(position.notional)} USDT`,
+    value: position.notional,
+    color: colors[index % colors.length],
+  }));
+  $: capitalActive = capitalHovered ?? capitalSelected;
+  $: holdingActive = holdingHovered ?? holdingSelected;
+  $: activeCapital = capitalItems.find((item) => item.id === capitalActive);
+  $: activeHolding = holdingItems.find((item) => item.id === holdingActive);
+  $: if (
+    holdingSelected &&
+    !holdingItems.some((item) => item.id === holdingSelected)
+  )
+    holdingSelected = null;
+  function selectCapital(id: string) {
+    capitalSelected = capitalSelected === id ? null : id;
+  }
+  function selectHolding(id: string) {
+    holdingSelected = holdingSelected === id ? null : id;
+  }
 </script>
 
 <section class="section" aria-label="资金配置">
@@ -30,33 +82,87 @@
     ></div>
   {:else if !alloc}<div class="empty-state">资金配置暂不可用</div>
   {:else}
-    <div class="capital-values">
-      <div>
-        <div class="label">已用保证金</div>
-        <div class="number capital-value">
-          {fmtUSDT(alloc.margin_used, 0)}<span> USDT</span>
-        </div>
+    <div class="allocation-charts">
+      <div class="chart-column">
+        <h3>保证金占用</h3>
+        <AllocationDonut
+          items={alloc.equity > 0 ? capitalItems : []}
+          label="保证金与闲置资金分布"
+          activeId={capitalActive}
+          selectedId={capitalSelected}
+          centerLabel={activeCapital
+            ? activeCapital.id === "margin"
+              ? "已用保证金"
+              : "闲置资金"
+            : "占总权益"}
+          centerValue={activeCapital
+            ? fmtUSDT(
+                activeCapital.id === "cash"
+                  ? alloc.free_cash
+                  : alloc.margin_used,
+                0,
+              )
+            : usage === null
+              ? "--"
+              : fmtPct(usage, 1)}
+          centerDetail={activeCapital ? "USDT" : "保证金"}
+          on:inspect={(event) => (capitalHovered = event.detail)}
+          on:select={(event) => selectCapital(event.detail)}
+        />
       </div>
-      <div class="text-right">
-        <div class="label">占权益</div>
-        <div class="number capital-value">
-          {usage === null ? "—" : fmtPct(usage, 1)}
-        </div>
+      <div class="chart-column">
+        <h3>名义持仓分布</h3>
+        <AllocationDonut
+          items={holdingItems}
+          label="各标的名义持仓占比"
+          activeId={holdingActive}
+          selectedId={holdingSelected}
+          centerLabel={activeHolding ? activeHolding.name : "名义敞口"}
+          centerValue={activeHolding
+            ? fmtPct(activeHolding.pct, 1)
+            : holdings.length
+              ? fmtUSDT(alloc.notional, 0)
+              : "空仓"}
+          centerDetail={activeHolding
+            ? `${fmtUSDT(activeHolding.notional, 0)} USDT`
+            : holdings.length
+              ? "USDT"
+              : ""}
+          on:inspect={(event) => (holdingHovered = event.detail)}
+          on:select={(event) => selectHolding(event.detail)}
+        />
       </div>
     </div>
-    <div
-      class="capital-track"
-      role="img"
-      aria-label={`保证金占用 ${usage === null ? "未知" : fmtPct(usage, 1)}`}
-    >
-      <div style:width={`${Math.max(0, Math.min(1, usage ?? 0)) * 100}%`}></div>
+    <div class="capital-legend">
+      {#each capitalItems as item}
+        <button
+          class="capital-row"
+          class:highlighted={capitalActive === item.id}
+          aria-pressed={capitalSelected === item.id}
+          on:pointerenter={() => (capitalHovered = item.id)}
+          on:pointerleave={() => (capitalHovered = null)}
+          on:focus={() => (capitalHovered = item.id)}
+          on:blur={() => (capitalHovered = null)}
+          on:click={() => selectCapital(item.id)}
+        >
+          <span class="legend-name"
+            ><span class="swatch" style:background={item.color}
+            ></span>{item.id === "margin" ? "已用保证金" : "闲置资金"}</span
+          >
+          <span class:neg={item.id === "cash" && alloc.free_cash < 0}
+            ><span class="number"
+              >{fmtUSDT(
+                item.id === "cash" ? alloc.free_cash : alloc.margin_used,
+                0,
+              )}</span
+            > <span class="unit">USDT</span></span
+          >
+        </button>
+      {/each}
     </div>
-    <div class="capital-free">
-      <span>闲置资金</span><span class="number"
-        >{fmtUSDT(alloc.free_cash, 0)}
-        <span class="text-ink-500">USDT</span></span
-      >
-    </div>
+    {#if alloc.free_cash < 0}<p class="capital-warning">
+        保证金超出权益 {fmtUSDT(-alloc.free_cash)} USDT
+      </p>{/if}
     <div class="exposure">
       <div>
         <span class="label">全仓杠杆</span><strong class="number"
@@ -70,31 +176,37 @@
       </div>
     </div>
     <div class="allocation-label">
-      名义持仓分布 <span>{holdings.length} 个</span>
+      <h3>持仓构成</h3>
+      <span>{holdings.length} 个标的</span>
     </div>
     {#if holdings.length === 0}<div class="empty-state min-h-24">当前空仓</div>
     {:else}<div class="allocation-rows">
-        {#each holdings as p, i}<div class="allocation-row">
-            <div class="allocation-readout">
-              <span class="symbol"
-                >{p.symbol.replace(/USDT$/, "")}<span class="side"
-                  >{p.side === "LONG"
-                    ? "多"
-                    : p.side === "SHORT"
-                      ? "空"
-                      : p.side}</span
-                ></span
-              ><span class="number">{fmtPct(p.pct, 1)}</span>
-            </div>
-            <div class="allocation-track">
-              <div
-                style:width={`${Math.max(0, Math.min(1, p.pct)) * 100}%`}
-                style:background={p.side === "SHORT"
-                  ? "var(--neg)"
-                  : colors[i % colors.length]}
-              ></div>
-            </div>
-          </div>{/each}
+        {#each holdingItems as item}
+          <button
+            class="holding-row"
+            class:highlighted={holdingActive === item.id}
+            aria-label={item.label}
+            aria-pressed={holdingSelected === item.id}
+            on:pointerenter={() => (holdingHovered = item.id)}
+            on:pointerleave={() => (holdingHovered = null)}
+            on:focus={() => (holdingHovered = item.id)}
+            on:blur={() => (holdingHovered = null)}
+            on:click={() => selectHolding(item.id)}
+          >
+            <span class="legend-name"
+              ><span class="swatch" style:background={item.color}></span><span
+                class="symbol">{item.name}</span
+              ><span class="side" class:neg={item.side === "SHORT"}
+                >{item.side === "LONG"
+                  ? "多"
+                  : item.side === "SHORT"
+                    ? "空"
+                    : item.side}</span
+              ></span
+            >
+            <span class="number">{fmtPct(item.pct, 1)}</span>
+          </button>
+        {/each}
       </div>{/if}
     <div class="allocation-time">
       <Clock3 size={11} /><span
@@ -107,50 +219,76 @@
 </section>
 
 <style>
-  .capital-values {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  .allocation-charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+    margin: 0 -4px 8px;
   }
-  .capital-value {
-    font-size: 18px;
-    margin-top: 8px;
+  .chart-column {
+    min-width: 0;
   }
-  .capital-value span {
-    font-size: 10px;
-    color: var(--lo);
-  }
-  .capital-track {
-    height: 5px;
-    background: var(--panel2);
-    margin: 18px 0 12px;
-    overflow: hidden;
-    border-radius: 1px;
-  }
-  .capital-track > div {
-    height: 100%;
-    background: var(--pos);
-  }
-  .capital-free {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+  .chart-column h3 {
     font-size: 11px;
     color: var(--mid);
+    text-align: center;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .capital-legend {
+    display: grid;
+    gap: 2px;
+  }
+  .capital-row,
+  .holding-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 36px;
+    gap: 8px;
+    padding: 7px 5px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font-size: 11px;
+    color: var(--mid);
+    text-align: left;
+    transition: background 150ms;
+  }
+  .capital-row:hover,
+  .holding-row:hover,
+  .highlighted {
+    background: var(--panel2);
+  }
+  .legend-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+  .swatch {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 2px;
+  }
+  .unit {
+    font-size: 9px;
+    color: var(--lo);
   }
   .exposure {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 18px;
     border-block: 1px solid var(--line);
-    padding: 17px 0;
-    margin-top: 20px;
+    padding: 16px 0;
+    margin-top: 14px;
   }
   .exposure strong {
-    font-size: 18px;
     display: block;
+    font-size: 18px;
     font-weight: 500;
     margin-top: 8px;
   }
@@ -161,44 +299,32 @@
   .allocation-label {
     display: flex;
     justify-content: space-between;
-    color: var(--mid);
-    font-size: 11px;
-    margin-top: 19px;
-  }
-  .allocation-label span {
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
     color: var(--lo);
+    font-size: 10px;
+  }
+  .allocation-label h3 {
+    color: var(--mid);
+    font-weight: 500;
+    font-size: 11px;
   }
   .allocation-rows {
-    display: grid;
-    gap: 13px;
-    margin-top: 16px;
-    max-height: 210px;
+    max-height: 216px;
     overflow: auto;
-  }
-  .allocation-readout {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 11px;
-    gap: 12px;
+    margin-top: 9px;
+    padding: 3px;
+    margin-inline: -3px;
   }
   .symbol {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
+    overflow-wrap: anywhere;
   }
   .side {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--lo);
-    margin-left: 8px;
-    font-weight: 400;
-  }
-  .allocation-track {
-    height: 3px;
-    background: var(--panel2);
-    margin-top: 6px;
-  }
-  .allocation-track > div {
-    height: 100%;
   }
   .allocation-time {
     display: flex;
@@ -206,6 +332,27 @@
     gap: 6px;
     color: var(--lo);
     font-size: 10px;
-    margin-top: 20px;
+    margin-top: 18px;
+  }
+  .capital-warning {
+    color: var(--neg);
+    font-size: 11px;
+    margin-top: 8px;
+  }
+  @media (max-width: 900px) {
+    .allocation-charts {
+      max-width: 440px;
+      margin-inline: auto;
+      gap: 24px;
+    }
+    .capital-row,
+    .holding-row {
+      min-height: 42px;
+      padding-inline: 8px;
+      font-size: 12px;
+    }
+    .allocation-rows {
+      max-height: 260px;
+    }
   }
 </style>

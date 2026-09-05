@@ -55,6 +55,7 @@ rounded:
   sm: "4px"
   nav: "5px"
   md: "6px"
+  metric: "8px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -118,6 +119,14 @@ components:
     backgroundColor: "transparent"
     textColor: "{colors.text-primary}"
     typography: "{typography.metric}"
+  overview-metric-card:
+    backgroundColor: "{colors.graphite-panel}"
+    textColor: "{colors.text-primary}"
+    rounded: "{rounded.metric}"
+    padding: "18px 18px 14px"
+  allocation-ring:
+    textColor: "{colors.text-primary}"
+    width: "180px"
   card:
     backgroundColor: "{colors.graphite-panel}"
     textColor: "{colors.text-primary}"
@@ -180,7 +189,7 @@ At the compact breakpoint (600px), page headings and metric values become (22px)
 
 ## Layout
 
-Use continuous sections with a shared left edge, flexible headers, and measured vertical gaps. Section padding is (24px) vertically; section-heading spacing is (20px). Metric bands have four columns from (1024px) upward and two columns below, with internal separators and stable number blocks.
+Use continuous sections with a shared left edge, flexible headers, and measured vertical gaps. Section padding is (24px) vertically; section-heading spacing is (20px). Review metric bands have four columns from (1024px) upward and two columns below, with internal separators and stable number blocks. Overview metric cards follow the same column breakpoint with gaps (12px, reducing to 10px at 600px). The two allocation rings remain side by side within their unframed section.
 
 The desktop shell uses a fixed sidebar (200px), a top bar (65px), and centered main content capped at (1500px) including its padding. Main padding is (32px 36px 8px). At (1100px) and below, the sidebar narrows to (176px) and main horizontal padding becomes (24px). At (767px) and below, the sidebar is replaced by a compact top bar (58px) and, when multiple routes are available, fixed bottom navigation with safe-area padding. Main horizontal padding becomes (18px), and bottom space protects content from navigation.
 
@@ -188,13 +197,13 @@ Comparison layouts use a flexible main track plus a secondary track (300px, redu
 
 ## Elevation & Depth
 
-The routed interface uses no box shadows. Tonal surfaces, fine borders, and spacing establish depth. Hover changes background or text color; focus uses an outline or field-border change. The metric band and major content sections remain unframed.
+The routed interface uses no box shadows. Tonal surfaces, fine borders, and spacing establish depth. Hover changes background or text color; focus uses an outline or field-border change. Review metric bands and major content sections remain unframed; individual overview metrics use restrained tonal panels.
 
 **The Flat Workspace Rule.** Separate page sections with spacing and fine rules. Reserve a bordered container for an individual item or a genuinely framed control.
 
 ## Shapes
 
-Controls and the existing individual-card primitive use restrained corners (6px); chips and segments use (4px), navigation rows use (5px). Structural rules are thin (1px). Circular geometry is limited to identity avatars, chart markers, and native binary controls. Do not promote the retained legacy card wrappers into the page-composition model.
+Controls and the existing individual-card primitive use restrained corners (6px); overview metric cards use (8px), chips and segments use (4px), and navigation rows use (5px). Structural rules are thin (1px). Circular geometry serves identity avatars, chart markers, native binary controls, and financial allocation rings. Do not promote individual-card wrappers into the page-composition model.
 
 ## Components
 
@@ -214,7 +223,9 @@ Positive and negative chips use lightly tinted backgrounds and explicit text, wi
 
 ### Cards / Containers
 
-The existing individual-card primitive is a graphite panel with a subtle border and no shadow. The routed dashboard and review screens express their major groups as metric bands and unframed sections. Keep this distinction when reusing the retained primitive.
+The existing individual-card primitive is a graphite panel with a subtle border and no shadow. Major dashboard and review groups remain unframed sections. The overview uses four individual metric cards with Lucide heading icons, restrained green, gain/loss, neutral, and blue tonal surfaces, and aligned values. Their minimum height is (166px, reducing to 156px at 600px); values step from (25px) to (23px at 1150px) and (22px at 600px). Review statistics retain the flat metric band.
+
+The overview NAV card includes a compact ochre sparkline derived from the same fetched NAV history and selected range as the main chart. Preserve its time spacing and range label; omit the line when fewer than two valid observations exist.
 
 ### Navigation
 
@@ -227,6 +238,8 @@ Align numbers to the right in tables and use tabular mono values. Headers are qu
 ### Charts and Data States
 
 Use the established series colors, restrained dashed grid lines, small markers, and low-opacity area fills. The time-series inspector keeps its legend values and timestamp above the plot; pointer, touch, and keyboard interaction update those fixed locations. Missing data has a stable empty region; a refresh dims retained chart data. Skeletons pulse (1.7s). Reduced-motion preferences disable smooth scrolling and reduce animation and transition duration to (0.01ms).
+
+Allocation uses two D3-computed sector rings: margin versus idle funds, and positions weighted by notional exposure. Rings have a square footprint capped at (180px), inner and outer radii (59px / 79px), and fixed central readings. Pointer or keyboard focus on a sector or its legend row updates the center and dims other sectors; click, Enter, or Space toggles persistent selection. Keep amounts, percentages, units, and long/short labels alongside swatches. Nonpositive values do not produce sectors; negative idle funds remain visible in the ledger and warning, and empty positions retain an explicit empty state.
 
 ## Do's and Don'ts
 

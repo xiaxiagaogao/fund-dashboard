@@ -13,8 +13,6 @@
   } from "$lib/api";
   import {
     fmtUSDT,
-    fmtShares,
-    fmtSignedUSDT,
     fmtSignedPct,
     fmtDate,
     fmtRelativeTime,
@@ -27,6 +25,7 @@
   import PositionDonuts from "$lib/components/PositionDonuts.svelte";
   import ClosedTrades from "$lib/components/ClosedTrades.svelte";
   import OpenPositions from "$lib/components/OpenPositions.svelte";
+  import OverviewMetrics from "$lib/components/OverviewMetrics.svelte";
   let me: Me | null = null;
   let summary: Summary | null = null;
   let aggregate: Aggregate | null = null;
@@ -48,9 +47,6 @@
   $: rankedMembers =
     aggregate?.friends.slice().sort((a, b) => b.value_usdt - a.value_usdt) ??
     [];
-  $: fundPnl = aggregate?.friends.reduce((s, f) => s + f.pnl_usdt, 0) ?? 0;
-  $: fundDeposits =
-    aggregate?.friends.reduce((s, f) => s + f.net_deposits, 0) ?? 0;
   $: stale =
     !!summary?.snapshot_at_ms && now - summary.snapshot_at_ms > 90 * 60_000;
   async function fetchWindow(r: RangeKey) {
@@ -149,68 +145,7 @@
   {#if refreshError}<div class="alert mb-5" role="alert">
       {refreshError}
     </div>{/if}
-  <div class="metric-strip">
-    <div class="metric">
-      <div class="metric-label">
-        {me.is_admin ? "基金总权益" : "我的估值"}
-        <span class="text-ink-500 ml-1">USDT</span>
-      </div>
-      <div class="metric-number">
-        {fmtUSDT(me.is_admin ? aggregate.latest_equity : summary.value_usdt)}
-      </div>
-      <div class="metric-note">
-        {me.is_admin
-          ? `${aggregate.friends.length} 位成员`
-          : `${fmtShares(summary.shares, 2)} 份额`}
-      </div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">
-        {me.is_admin ? "全员净收益" : "我的累计收益"}
-        <span class="text-ink-500 ml-1">USDT</span>
-      </div>
-      <div
-        class={"metric-number " +
-          pnlClass(me.is_admin ? fundPnl : summary.pnl_usdt)}
-      >
-        {fmtSignedUSDT(me.is_admin ? fundPnl : summary.pnl_usdt)}
-      </div>
-      <div class="metric-note">
-        净投入 <span class="number"
-          >{fmtUSDT(me.is_admin ? fundDeposits : summary.net_deposits, 0)}</span
-        >
-      </div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">基金单位净值</div>
-      <div class="metric-number">{summary.latest_nav.toFixed(4)}</div>
-      <div class="metric-note">
-        NAV{#if !me.is_admin}
-          · 总权益 <span class="number"
-            >{fmtUSDT(summary.latest_equity, 0)}</span
-          >{/if}
-      </div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">{me.is_admin ? "我的估值" : "我的收益率"}</div>
-      <div
-        class={"metric-number " +
-          (!me.is_admin ? pnlClass(summary.pnl_pct) : "")}
-      >
-        {me.is_admin
-          ? fmtUSDT(summary.value_usdt)
-          : fmtSignedPct(summary.pnl_pct)}
-      </div>
-      <div class="metric-note">
-        {#if me.is_admin}<span class={pnlClass(summary.pnl_pct)}
-            >{fmtSignedPct(summary.pnl_pct)}</span
-          >
-          · <span class="number">{fmtShares(summary.shares, 0)}</span> 份额
-          <div class="mt-1">净收益 <span class={"number " + pnlClass(summary.pnl_usdt)}>{fmtSignedUSDT(summary.pnl_usdt)}</span></div>{:else}累计收益
-          / 净投入{/if}
-      </div>
-    </div>
-  </div>
+  <OverviewMetrics {me} {summary} {aggregate} {curve} {range} />
   {#if rangeError}<div role="alert" class="alert mt-4">{rangeError}</div>{/if}
   <div class="workspace-split">
     <div>
