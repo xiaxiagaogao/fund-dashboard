@@ -176,6 +176,8 @@
     </div>{/if}
 </div>
 
+<slot {index} />
+
 <style>
   .legend {
     display: flex;

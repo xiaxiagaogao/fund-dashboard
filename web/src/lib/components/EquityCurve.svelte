@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { despike } from "$lib/format";
+  import { despike, fmtPct, pnlClass } from "$lib/format";
   import type { EquityPoint, IndexPoint } from "$lib/api";
   import { RANGES, type RangeKey } from "$lib/ranges";
   import TimeSeriesChart from "./TimeSeriesChart.svelte";
@@ -34,7 +34,7 @@
     if (points.length < 2 || nav[0] <= 0) return [];
     const rows = [
       {
-        label: "XG fund",
+        label: "我的收益",
         color: "var(--pos)",
         values: nav.map((v) => v / nav[0] - 1),
       },
@@ -53,6 +53,21 @@
     }
     return rows;
   })();
+  function comparisonsAt(index: number) {
+    const mine = series[0]?.values[index];
+    return [
+      { label: "纳指 100", short: "NQ" },
+      { label: "标普 500", short: "SP" },
+    ].map((benchmark) => {
+      const value = series.find((row) => row.label === benchmark.label)?.values[
+        index
+      ];
+      const delta = mine - (value ?? NaN);
+      // Match the displayed precision so rounding cannot say "跑赢 0.00%".
+      const rounded = Number((delta * 100).toFixed(2)) / 100;
+      return { ...benchmark, delta: Number.isFinite(rounded) ? rounded : null };
+    });
+  }
 </script>
 
 <section class="section" aria-label="收益走势">
@@ -74,15 +89,51 @@
     {loading}
     area
     label="收益走势，按左右方向键查看历史快照"
-  />
-  <div class="muted-note mt-4">
-    区间收益 · NAV 归一化{#if qqq.length === 0 || spy.length === 0}<span
-        class="ml-3">部分基准数据暂不可用</span
-      >{/if}
-  </div>
+    let:index
+  >
+    <div
+      class="benchmark-comparison"
+      role="group"
+      aria-label="相对基准收益"
+      aria-busy={loading}
+    >
+      {#each comparisonsAt(index) as comparison}
+        <span
+          class={comparison.delta === null
+            ? "text-ink-400"
+            : pnlClass(comparison.delta)}
+          title={`${comparison.label}：所选区间收益率之差，单位为百分点`}
+        >
+          {#if comparison.delta === null}{comparison.short} 暂无数据
+          {:else if comparison.delta === 0}与 {comparison.short} 持平
+            <span class="number">0.00%</span>
+          {:else}{comparison.delta > 0 ? "跑赢" : "跑输"}
+            {comparison.short}
+            <span class="number">{fmtPct(Math.abs(comparison.delta))}</span>
+          {/if}
+        </span>
+      {/each}
+    </div>
+  </TimeSeriesChart>
 </section>
 
 <style>
+  .benchmark-comparison {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    margin-top: 16px;
+    min-height: 20px;
+    font-size: 12px;
+  }
+  .benchmark-comparison > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .benchmark-comparison[aria-busy="true"] {
+    opacity: 0.45;
+  }
   .range-control {
     display: flex;
     flex-wrap: wrap;
