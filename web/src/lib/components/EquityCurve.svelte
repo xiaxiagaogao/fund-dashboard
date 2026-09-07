@@ -40,8 +40,8 @@
       },
     ];
     for (const benchmark of [
-      { pts: qqq, label: "纳指 100", color: "var(--benchmark-a)" },
-      { pts: spy, label: "标普 500", color: "var(--benchmark-b)" },
+      { pts: qqq, label: "QQQ", color: "var(--benchmark-a)" },
+      { pts: spy, label: "SPY", color: "var(--benchmark-b)" },
     ]) {
       const base = interp(benchmark.pts, times[0]);
       if (base > 0)
@@ -56,8 +56,8 @@
   function comparisonsAt(index: number) {
     const mine = series[0]?.values[index];
     return [
-      { label: "纳指 100", short: "NQ" },
-      { label: "标普 500", short: "SP" },
+      { label: "QQQ", short: "QQQ" },
+      { label: "SPY", short: "SPY" },
     ].map((benchmark) => {
       const value = series.find((row) => row.label === benchmark.label)?.values[
         index
